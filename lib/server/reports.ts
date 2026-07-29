@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { executivePersonas } from "@/lib/ai/executives";
+import { isMissingColumn, warnSchemaBehind } from "@/lib/server/schema-drift";
 import type { ExecutiveVoteDetail, ReportDetail } from "@/features/reports/types";
 
 /**
@@ -123,45 +124,66 @@ export async function getReport(userId: string, id: string): Promise<ReportDetai
   } as ReportDetail;
 }
 
-/** Writes the board's verdict. One report per meeting — re-running a session replaces it. */
+/**
+ * Writes the board's verdict. One report per meeting — re-running a session
+ * replaces it.
+ *
+ * Split into core and analysis halves so a database that predates
+ * `202607290002_bootstrap_full_schema.sql` still gets a report. The read path
+ * above already renders reports without the analysis columns; before this,
+ * *writing* one threw PGRST204 and discarded a session that had already cost
+ * a full debate's worth of model calls. The retry is a fallback, not a
+ * substitute for the migration — the analysis sections are dropped, so the
+ * warning names the file to run.
+ */
 export async function createReport(
   userId: string,
   meetingId: string,
   report: Omit<ReportDetail, "id" | "generatedAt">,
 ): Promise<string> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("reports")
-    .upsert(
-      {
-        meeting_id: meetingId,
-        user_id: userId,
-        startup_name: report.startupName,
-        one_liner: report.oneLiner,
-        industry: report.industry,
-        investment_score: report.investmentScore,
-        verdict: report.verdict,
-        executive_summary: report.executiveSummary,
-        swot: report.swot,
-        dimensions: report.dimensions,
-        risks: report.risks,
-        financials: report.financials,
-        investment_readiness: report.investmentReadiness ?? null,
-        confidence: report.confidence ?? null,
-        consensus: report.consensus ?? [],
-        disagreements: report.disagreements ?? [],
-        most_convincing_argument: report.mostConvincingArgument ?? null,
-        weakest_founder_answer: report.weakestFounderAnswer ?? null,
-        risk_timeline: report.riskTimeline ?? [],
-        next_steps: report.nextSteps ?? [],
-        roadmap: report.roadmap ?? [],
-        sources: report.sources ?? [],
-        generated_at: new Date().toISOString(),
-      },
-      { onConflict: "meeting_id" },
-    )
-    .select("id")
-    .single();
-  if (error || !data) throw new Error(error?.message ?? "Could not save report.");
-  return data.id;
+
+  const core = {
+    meeting_id: meetingId,
+    user_id: userId,
+    startup_name: report.startupName,
+    one_liner: report.oneLiner,
+    industry: report.industry,
+    investment_score: report.investmentScore,
+    verdict: report.verdict,
+    executive_summary: report.executiveSummary,
+    swot: report.swot,
+    dimensions: report.dimensions,
+    risks: report.risks,
+    financials: report.financials,
+    generated_at: new Date().toISOString(),
+  };
+
+  const analysis = {
+    investment_readiness: report.investmentReadiness ?? null,
+    confidence: report.confidence ?? null,
+    consensus: report.consensus ?? [],
+    disagreements: report.disagreements ?? [],
+    most_convincing_argument: report.mostConvincingArgument ?? null,
+    weakest_founder_answer: report.weakestFounderAnswer ?? null,
+    risk_timeline: report.riskTimeline ?? [],
+    next_steps: report.nextSteps ?? [],
+    roadmap: report.roadmap ?? [],
+    sources: report.sources ?? [],
+  };
+
+  const save = (row: Record<string, unknown>) =>
+    supabase.from("reports").upsert(row, { onConflict: "meeting_id" }).select("id").single();
+
+  const full = await save({ ...core, ...analysis });
+  if (!isMissingColumn(full.error)) {
+    if (full.error || !full.data) throw new Error(full.error?.message ?? "Could not save report.");
+    return full.data.id;
+  }
+
+  warnSchemaBehind("reports", full.error?.message);
+
+  const bare = await save(core);
+  if (bare.error || !bare.data) throw new Error(bare.error?.message ?? "Could not save report.");
+  return bare.data.id;
 }

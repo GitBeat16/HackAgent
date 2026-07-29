@@ -14,7 +14,12 @@
     "test:factcheck": "tsx --tsconfig tsconfig.json scripts/test-fact-check.ts",
     "test:tts": "tsx --tsconfig tsconfig.json scripts/test-edge-tts.ts",
     "test:metrics": "tsx --tsconfig tsconfig.json scripts/test-eval-metrics.ts",
-    "test": "npm run test:orchestration && npm run test:session && npm run test:factcheck && npm run test:tts && npm run test:metrics",
+    "piper:voices": "tsx --tsconfig tsconfig.json scripts/fetch-piper-voices.ts",
+    "piper:samples": "tsx --tsconfig tsconfig.json scripts/piper-samples.ts",
+    "test:piper": "tsx --tsconfig tsconfig.json scripts/test-piper.ts",
+    "test:normalise": "tsx --tsconfig tsconfig.json scripts/test-normalisation.ts",
+    "test:schema": "tsx --tsconfig tsconfig.json scripts/test-schema-drift.ts",
+    "test": "npm run test:orchestration && npm run test:session && npm run test:factcheck && npm run test:tts && npm run test:metrics && npm run test:normalise && npm run test:schema && npm run test:piper",
     "eval": "tsx --tsconfig tsconfig.json scripts/eval-board.ts"
   },
   "dependencies": {

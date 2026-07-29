@@ -1,0 +1,41 @@
+BoardroomAI — third-party attribution
+=====================================
+
+Speech synthesis
+----------------
+
+Piper (https://github.com/rhasspy/piper), MIT licence. The binary is
+downloaded at setup time and is not redistributed as part of this repository.
+
+Note: Piper's successor repository, `piper1-gpl`, is GPL-3.0. This project
+pins the MIT-licensed 2023.11.14-2 release deliberately.
+
+Voice models
+------------
+
+Voice models are downloaded from https://huggingface.co/rhasspy/piper-voices
+by `npm run piper:voices` and are not redistributed here. Each was checked
+against its upstream MODEL_CARD before being mapped to a persona; the full
+audit, including the voices that were rejected, is in docs/PIPER_VOICES.md.
+
+Requiring attribution:
+
+  en_GB-alba-medium — CC BY 4.0
+    Dataset: University of Edinburgh, datashare handle 10283/3270
+    https://datashare.ed.ac.uk/handle/10283/3270
+    https://creativecommons.org/licenses/by/4.0/
+
+No attribution required (public domain, CC0 or Apache-2.0), listed for
+provenance:
+
+  en_US-kristin-medium   Public domain — LibriVox
+  en_US-ljspeech-medium  Public domain — LJ Speech Dataset
+  en_US-norman-medium    Public domain — LibriVox
+  en_US-bryce-medium     Public domain — upstream states no dataset URL
+  en_GB-cori-medium      Public domain — LibriVox
+  en_US-kathleen-low     CC0-1.0 — rhasspy/dataset-voice-kathleen
+  en_US-joe-medium       CC0-1.0 — OHF-Voice/voice-datasets
+
+If you re-cast a persona onto a different model, re-check its MODEL_CARD and
+update this file. Several Piper voices — including the popular `lessac` and
+`amy` — are not licensed for commercial use.

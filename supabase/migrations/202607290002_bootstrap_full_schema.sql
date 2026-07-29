@@ -1,23 +1,30 @@
 -- =====================================================================
 -- BoardroomAI — one-shot bootstrap for a project that already has a
--- `profiles` table from a different schema.
+-- `profiles` table, from either schema this app has shipped.
 --
--- Run this ONE file. Do not run 202607260001, 202607260002 or
--- 202607290001 alongside it — this supersedes all three.
+-- On a fresh project this is the only file you need before
+-- 202607290003_research_and_verification.sql — it supersedes both
+-- 202607260001_initial_schema.sql and 202607260002_workspace_data.sql.
+-- Running it *after* those two is also fine, and is the case it is most
+-- often needed for: they create `reports` and `votes` without the
+-- analysis columns, and this is what adds them.
 --
 -- Why a consolidated file instead of the three originals:
 --
---   This project's `profiles` table was created by a standalone auth
---   script with `full_name` / `provider` columns. The app reads
---   `display_name`, `title` and `workspace_name`. Worse, both schemas
---   define `handle_new_user()`, so running the original migration would
---   `create or replace` the working signup trigger with one that inserts
---   a `display_name` column that does not exist yet — breaking signup
---   for every new user.
+--   `profiles` may have been created either by a standalone auth script
+--   (`full_name` / `provider`) or by 202607260001_initial_schema
+--   (`display_name` / `title` / `workspace_name`). Both schemas define
+--   `handle_new_user()`, so applying either one's migration on top of the
+--   other replaces a working signup trigger with one that inserts a
+--   column that does not exist — breaking signup for every new user.
 --
---   This file adds the missing columns first, backfills them from the
---   existing data, and installs a trigger that satisfies BOTH schemas.
+--   This file reconciles the two: it adds every column both sides expect,
+--   backfills across them, and installs a trigger that satisfies BOTH.
 --   Nothing is dropped and no existing column is touched.
+--
+-- The editor runs this as a single transaction, so any error anywhere
+-- rolls back the whole file, including the report columns in section 3.
+-- If a statement fails, nothing was applied — fix it and re-run.
 --
 -- Safe to run more than once.
 -- =====================================================================
@@ -25,17 +32,46 @@
 
 -- ---------------------------------------------------------------------
 -- 1. Reconcile `profiles` — additive only
+--
+-- Two different schemas have created this table, and which one a project
+-- started from is not knowable from here:
+--
+--   the standalone auth script   → full_name, provider
+--   202607260001_initial_schema  → display_name, title, workspace_name
+--
+-- The backfill and the signup trigger below both reference columns from
+-- *both* sides, so every one of them is added first. Skipping this is
+-- what made an earlier version of this file abort with
+-- `column "full_name" does not exist` on a database that had taken the
+-- initial schema — and because the editor runs the file in one
+-- transaction, the abort rolled back the report columns in section 3 too,
+-- which are the whole point of running it.
+--
+-- Adding both sets is also what lets the trigger below stay a single
+-- static insert instead of dynamic SQL. Nothing is dropped and no
+-- existing column is touched.
 -- ---------------------------------------------------------------------
 alter table public.profiles
   add column if not exists display_name   text,
   add column if not exists title          text,
-  add column if not exists workspace_name text;
+  add column if not exists workspace_name text,
+  add column if not exists full_name      text,
+  add column if not exists provider       text,
+  add column if not exists email          text,
+  add column if not exists avatar_url     text;
 
--- Carry the name across so existing users are not blank in the UI.
+-- Carry the name across so existing users are not blank in the UI,
+-- whichever side of the split it was stored on. On a column that was just
+-- added by the statement above, every value is null and this is a no-op.
 update public.profiles
    set display_name = full_name
  where display_name is null
    and full_name is not null;
+
+update public.profiles
+   set full_name = display_name
+ where full_name is null
+   and display_name is not null;
 
 
 -- ---------------------------------------------------------------------
@@ -237,6 +273,12 @@ create index if not exists activity_user_created_idx    on public.activity_event
 -- `meetings`, so there is one source of truth for who owns a session.
 -- Without these policies any anon key holder could read every meeting.
 -- ---------------------------------------------------------------------
+-- `profiles` is included because section 7 verifies it and because a
+-- project that came from the standalone auth script may never have had it
+-- enabled — which leaves every user's profile readable by any holder of
+-- the anon key. On a database from 202607260001 this is already the case
+-- and both statements are no-ops.
+alter table public.profiles           enable row level security;
 alter table public.meetings           enable row level security;
 alter table public.meeting_executives enable row level security;
 alter table public.messages           enable row level security;
@@ -244,6 +286,10 @@ alter table public.votes              enable row level security;
 alter table public.reports            enable row level security;
 alter table public.workspace_data     enable row level security;
 alter table public.activity_events    enable row level security;
+
+drop policy if exists "Users manage their profile" on public.profiles;
+create policy "Users manage their profile" on public.profiles
+  for all using (id = auth.uid()) with check (id = auth.uid());
 
 drop policy if exists "Users manage their meetings" on public.meetings;
 create policy "Users manage their meetings" on public.meetings

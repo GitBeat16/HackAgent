@@ -361,13 +361,47 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
   return match ?? fallback;
 }
 
+/**
+ * Coerces a field the model was asked to return as an array.
+ *
+ * `?? []` only covers null and undefined, so a wrong *type* still reached
+ * `.find`/`.map` and threw — which killed the whole write-up. The types on
+ * `RawVerdict` describe what was requested, not what arrives: `groq.ts` falls
+ * back to plain JSON mode whenever a model rejects `json_schema`, and there
+ * the schema is only a prompt.
+ *
+ * The shape that comes back instead is nearly always the same one — an object
+ * keyed by the field each entry was supposed to carry, `{"Strengths": [...]}`
+ * rather than `[{ title: "Strengths", items: [...] }]`. Passing `keyed`
+ * rebuilds the entries from those keys so the content survives; every other
+ * shape degrades to empty, which each caller below already handles.
+ */
+function asArray<T>(value: T[] | undefined, keyed?: { key: string; value: string }): T[] {
+  if (Array.isArray(value)) return value;
+
+  const raw: unknown = value;
+  if (keyed && raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, unknown>).map(([key, entry]) =>
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? ({ [keyed.key]: key, ...entry } as T)
+        : ({ [keyed.key]: key, [keyed.value]: entry } as T),
+    );
+  }
+
+  return [];
+}
+
 /** Always returns all four sections, in a fixed order, so `SwotGrid` cannot miss a lookup. */
-function normaliseSwot(raw: RawVerdict["swot"]): SwotSection[] {
+export function normaliseSwot(raw: RawVerdict["swot"]): SwotSection[] {
+  const sections = asArray(raw, { key: "title", value: "items" });
+
   return SWOT_TITLES.map((title) => {
-    const section = (raw ?? []).find(
+    const section = sections.find(
       (entry) => String(entry?.title).trim().toLowerCase() === title.toLowerCase(),
     );
-    const items = (section?.items ?? []).map((item) => String(item).trim()).filter((item) => item.length > 0);
+    const items = asArray(section?.items)
+      .map((item) => String(item).trim())
+      .filter((item) => item.length > 0);
     return {
       title,
       items: items.length ? items : ["The board did not record anything here."],
@@ -375,17 +409,19 @@ function normaliseSwot(raw: RawVerdict["swot"]): SwotSection[] {
   });
 }
 
-function normaliseDimensions(raw: RawVerdict["dimensions"], fallback: number) {
+export function normaliseDimensions(raw: RawVerdict["dimensions"], fallback: number) {
+  const entries = asArray(raw, { key: "dimension", value: "score" });
+
   return DIMENSIONS.map((dimension) => {
-    const entry = (raw ?? []).find(
+    const entry = entries.find(
       (candidate) => String(candidate?.dimension).trim().toLowerCase() === dimension.toLowerCase(),
     );
     return { dimension, score: clampScore(entry?.score, fallback) };
   });
 }
 
-function normaliseRisks(raw: RawVerdict["risks"]): RiskRow[] {
-  const risks = (raw ?? [])
+export function normaliseRisks(raw: RawVerdict["risks"]): RiskRow[] {
+  const risks = asArray(raw, { key: "risk", value: "impact" })
     .filter((entry) => String(entry?.risk ?? "").trim().length > 0)
     .slice(0, 6)
     .map((entry) => ({
@@ -405,9 +441,9 @@ function normaliseRisks(raw: RawVerdict["risks"]): RiskRow[] {
       ];
 }
 
-function normaliseFinancials(raw: RawVerdict["financials"]) {
+export function normaliseFinancials(raw: RawVerdict["financials"]) {
   const seen = new Set<string>();
-  const financials = (raw ?? [])
+  const financials = asArray(raw, { key: "label", value: "value" })
     .map((entry) => ({
       label: String(entry?.label ?? "").trim(),
       value: String(entry?.value ?? "").trim(),
@@ -423,9 +459,10 @@ function normaliseFinancials(raw: RawVerdict["financials"]) {
   return financials.length ? financials : [{ label: "Figures", value: "Not stated in pitch" }];
 }
 
-function normaliseVotes(raw: RawVerdict["votes"], seatedExecutiveIds: string[]) {
+export function normaliseVotes(raw: RawVerdict["votes"], seatedExecutiveIds: string[]) {
   const knownIds = new Set(executivePersonas.map((persona) => persona.id));
   const seated = seatedExecutiveIds.filter((id) => knownIds.has(id));
+  const cast = asArray(raw, { key: "executiveId", value: "vote" });
 
   return seated.map((executiveId) => {
     const persona = executivePersonas.find((candidate) => candidate.id === executiveId);
@@ -439,7 +476,7 @@ function normaliseVotes(raw: RawVerdict["votes"], seatedExecutiveIds: string[]) 
         .map((alias) => alias.toLowerCase()),
     );
 
-    const entry = (raw ?? []).find((candidate) =>
+    const entry = cast.find((candidate) =>
       aliases.has(
         String(candidate?.executiveId ?? "")
           .trim()
@@ -498,7 +535,7 @@ function normaliseAnalysis(raw: RawAnalysis, investmentScore: number) {
     founder: clampScore(raw.confidence?.founder, 50),
   };
 
-  const consensus: ConsensusPoint[] = (raw.consensus ?? [])
+  const consensus: ConsensusPoint[] = asArray(raw.consensus, { key: "point", value: "executives" })
     .map((entry) => ({
       point: text(entry?.point, ""),
       executives: stringList(entry?.executives, 8),
@@ -506,7 +543,9 @@ function normaliseAnalysis(raw: RawAnalysis, investmentScore: number) {
     .filter((entry) => entry.point.length > 0)
     .slice(0, 4);
 
-  const disagreements: DisagreementPoint[] = (raw.disagreements ?? [])
+  // No `keyed` mapping here: a disagreement is two nested positions, so there
+  // is no single scalar field a bare object key could be rebuilt into.
+  const disagreements: DisagreementPoint[] = asArray(raw.disagreements)
     .map((entry) => ({
       topic: text(entry?.topic, ""),
       positionA: {
@@ -523,7 +562,10 @@ function normaliseAnalysis(raw: RawAnalysis, investmentScore: number) {
     .filter((entry) => entry.topic && entry.positionA.summary && entry.positionB.summary)
     .slice(0, 3);
 
-  const riskTimeline: RiskTimelineEntry[] = (raw.riskTimeline ?? [])
+  const riskTimeline: RiskTimelineEntry[] = asArray(raw.riskTimeline, {
+    key: "horizon",
+    value: "risk",
+  })
     .map((entry) => ({
       horizon: pickEnum(entry?.horizon, HORIZONS, "6 months"),
       risk: text(entry?.risk, ""),
@@ -533,7 +575,7 @@ function normaliseAnalysis(raw: RawAnalysis, investmentScore: number) {
     // Chronological, so the UI can render it as a timeline without sorting.
     .sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon));
 
-  const roadmap: RoadmapStep[] = (raw.roadmap ?? [])
+  const roadmap: RoadmapStep[] = asArray(raw.roadmap, { key: "title", value: "detail" })
     .map((entry) => ({
       title: text(entry?.title, ""),
       detail: text(entry?.detail, ""),

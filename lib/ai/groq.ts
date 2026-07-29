@@ -314,9 +314,20 @@ export async function generateJson<T>(
     .replace(/\s*```\s*$/, "")
     .trim();
 
+  let parsed: unknown;
   try {
-    return JSON.parse(cleaned) as T;
+    parsed = JSON.parse(cleaned);
   } catch {
     throw new GroqError("Groq returned malformed JSON.");
   }
+
+  // `JSON.parse` also accepts `null`, a bare string and a top-level array,
+  // none of which a caller can read fields from. Rejecting them here turns a
+  // wrong top-level shape into a GroqError the session can report and retry,
+  // rather than a TypeError thrown later inside a normaliser.
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new GroqError("Groq returned JSON that was not an object.");
+  }
+
+  return parsed as T;
 }

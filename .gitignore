@@ -1,5 +1,12 @@
 node_modules
 .next
+
+# Piper TTS: the binary and the ~484MB of voice models are downloaded, never
+# committed. `npm run piper:voices` refetches them from the manifest in
+# lib/speech/piper-voices.config.ts.
+vendor/piper/
+vendor/piper-voices/
+.cache/piper-tts/
 out
 build
 .env
@@ -7,3 +14,4 @@ build
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+vendor/piper-samples/

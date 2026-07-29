@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isMissingColumn, warnSchemaBehind } from "@/lib/server/schema-drift";
 import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage } from "@/types/api";
 import type { BoardVote } from "@/lib/ai/report-generator";
 import type { ExecutiveVoteDetail } from "@/features/reports/types";
@@ -45,16 +46,6 @@ const MEETING_SELECT = BASE_MEETING_SELECT.replace(
   "message, created_at)",
   "message, created_at, verification)",
 );
-
-/** Postgres "undefined column", surfaced by PostgREST on an unmigrated database. */
-function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return (
-    error.code === "42703" ||
-    /column .* does not exist/i.test(error.message ?? "") ||
-    /could not find the .* column/i.test(error.message ?? "")
-  );
-}
 
 /**
  * Runs a meetings query with the fact-check column, retrying without it when
@@ -189,25 +180,47 @@ export async function appendTranscriptMessage(meetingId: string, message: Meetin
   if (retry.error) throw new Error(retry.error.message);
 }
 
+/**
+ * Records how each executive voted.
+ *
+ * The rationale and the per-seat detail arrive with the bootstrap migration,
+ * so — as with `verification` above — they are dropped rather than allowed to
+ * fail a session that has already finished. The vote itself is what the
+ * dashboard counts and what `/reports` shows a split from, and it is in every
+ * schema this app has shipped.
+ */
 export async function recordVotes(meetingId: string, votes: ExecutiveVoteDetail[]) {
   if (!votes.length) return;
   const supabase = await createClient();
-  const { error } = await supabase.from("votes").upsert(
-    votes.map((vote) => ({
-      meeting_id: meetingId,
-      executive_id: vote.executiveId,
-      vote: vote.vote,
-      rationale: vote.rationale,
-      confidence: vote.confidence,
-      biggest_risk: vote.biggestRisk,
-      biggest_strength: vote.biggestStrength,
-      required_milestone: vote.requiredMilestone,
-      cheque_size: vote.chequeSize,
-      return_horizon: vote.returnHorizon,
-    })),
-    { onConflict: "meeting_id,executive_id" },
-  );
-  if (error) throw new Error(error.message);
+
+  const core = votes.map((vote) => ({
+    meeting_id: meetingId,
+    executive_id: vote.executiveId,
+    vote: vote.vote,
+  }));
+
+  const detail = votes.map((vote, index) => ({
+    ...core[index]!,
+    rationale: vote.rationale,
+    confidence: vote.confidence,
+    biggest_risk: vote.biggestRisk,
+    biggest_strength: vote.biggestStrength,
+    required_milestone: vote.requiredMilestone,
+    cheque_size: vote.chequeSize,
+    return_horizon: vote.returnHorizon,
+  }));
+
+  const save = (rows: Array<Record<string, unknown>>) =>
+    supabase.from("votes").upsert(rows, { onConflict: "meeting_id,executive_id" });
+
+  const full = await save(detail);
+  if (!full.error) return;
+  if (!isMissingColumn(full.error)) throw new Error(full.error.message);
+
+  warnSchemaBehind("votes", full.error.message);
+
+  const bare = await save(core);
+  if (bare.error) throw new Error(bare.error.message);
 }
 
 export async function completeMeeting(meetingId: string) {

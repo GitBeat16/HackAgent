@@ -317,6 +317,35 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
   return allowed.find((option) => option.toLowerCase() === String(value).trim().toLowerCase()) ?? fallback;
 }
 
+/**
+ * Coerces a field the model was asked to return as an array.
+ *
+ * The types on `RawDeliverables` describe what was requested, not what
+ * arrives: `groq.ts` falls back to plain JSON mode for models that reject
+ * `json_schema`, and there the schema is only a prompt. `?? []` covers null
+ * and undefined but not a wrong type, so an object here used to throw
+ * "`.map` is not a function" and cost the founder every deliverable.
+ *
+ * `keyed` recovers the usual substitute shape — an object keyed by the field
+ * each entry was meant to carry, `{"Stripe": "$18M raised"}` rather than
+ * `[{ name: "Stripe", funding: "$18M raised" }]`. Anything else degrades to
+ * empty, which the fallbacks below already cover.
+ */
+function asArray<T>(value: T[] | undefined, keyed?: { key: string; value: string }): T[] {
+  if (Array.isArray(value)) return value;
+
+  const raw: unknown = value;
+  if (keyed && raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, unknown>).map(([key, entry]) =>
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? ({ [keyed.key]: key, ...entry } as T)
+        : ({ [keyed.key]: key, [keyed.value]: entry } as T),
+    );
+  }
+
+  return [];
+}
+
 export interface DeliverablesInput {
   startupName: string;
   oneLiner: string;
@@ -330,7 +359,7 @@ export interface DeliverablesInput {
 function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDeliverables {
   const currentYear = new Date().getFullYear();
 
-  const marketSizing = (raw.marketResearch?.marketSizing ?? [])
+  const marketSizing = asArray(raw.marketResearch?.marketSizing, { key: "name", value: "value" })
     .map((slice) => ({
       name: text(slice?.name, "Market"),
       value: Math.max(0, num(slice?.value, 0)),
@@ -338,14 +367,22 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
     .filter((slice) => slice.value > 0)
     .slice(0, 3);
 
-  const marketTrend = (raw.marketResearch?.marketTrend ?? [])
+  const marketTrend = asArray(raw.marketResearch?.marketTrend, { key: "year", value: "marketSize" })
     .map((point, index) => ({
       year: text(point?.year, String(currentYear - 4 + index)),
       marketSize: Math.max(0, num(point?.marketSize, 0)),
     }))
     .slice(0, 6);
 
-  const capTable = (raw.financials?.capTable ?? [])
+  const prdSections = asArray(raw.prdDocument, { key: "title", value: "content" });
+  const slides = asArray(raw.pitchDeck, { key: "title", value: "bullets" });
+
+  const healthDimensions = asArray(raw.startupHealth?.healthDimensions, {
+    key: "dimension",
+    value: "score",
+  });
+
+  const capTable = asArray(raw.financials?.capTable, { key: "holder", value: "ownership" })
     .map((row) => ({
       holder: text(row?.holder, "Unallocated"),
       role: text(row?.role, "Common"),
@@ -363,7 +400,7 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
             { name: "SAM — Serviceable addressable", value: 10 },
             { name: "TAM — Total addressable", value: 100 },
           ],
-      competitors: (raw.marketResearch?.competitors ?? [])
+      competitors: asArray(raw.marketResearch?.competitors, { key: "name", value: "funding" })
         .map((competitor) => ({
           name: text(competitor?.name, "Unnamed competitor"),
           segment: text(competitor?.segment, "—"),
@@ -379,7 +416,7 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
           })),
     },
     financials: {
-      metrics: (raw.financials?.metrics ?? [])
+      metrics: asArray(raw.financials?.metrics, { key: "label", value: "value" })
         .map((metric) => ({
           label: text(metric?.label, "Metric"),
           value: text(metric?.value, "—"),
@@ -392,7 +429,7 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
         // MetricCard is keyed by label, so duplicates would collide.
         .filter((metric, index, all) => all.findIndex((other) => other.label === metric.label) === index)
         .slice(0, 4),
-      revenueExpense: (raw.financials?.revenueExpense ?? [])
+      revenueExpense: asArray(raw.financials?.revenueExpense, { key: "month", value: "revenue" })
         .map((point) => ({
           month: text(point?.month, "—"),
           revenue: Math.max(0, num(point?.revenue, 0)),
@@ -404,12 +441,12 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
     startupHealth: {
       healthScore: clamp(raw.startupHealth?.healthScore, input.investmentScore),
       healthDimensions: HEALTH_DIMENSIONS.map((dimension) => {
-        const entry = (raw.startupHealth?.healthDimensions ?? []).find(
+        const entry = healthDimensions.find(
           (candidate) => String(candidate?.dimension).trim().toLowerCase() === dimension.toLowerCase(),
         );
         return { dimension, score: clamp(entry?.score, input.investmentScore) };
       }),
-      healthFlags: (raw.startupHealth?.healthFlags ?? [])
+      healthFlags: asArray(raw.startupHealth?.healthFlags, { key: "title", value: "description" })
         .filter((flag) => String(flag?.title ?? "").trim().length > 0)
         .slice(0, 5)
         .map((flag, index) => ({
@@ -422,19 +459,19 @@ function normalise(raw: RawDeliverables, input: DeliverablesInput): GeneratedDel
     // Fixed ids and titles: the PRD outline is navigation, so it must not
     // drift between generations.
     prdDocument: PRD_SECTIONS.map((section, index) => {
-      const entry = (raw.prdDocument ?? []).find(
+      const entry = prdSections.find(
         (candidate) => String(candidate?.title).trim().toLowerCase() === section.title.toLowerCase(),
       );
       return {
         id: section.id,
         title: section.title,
-        content: text(entry?.content ?? raw.prdDocument?.[index]?.content, "Not specified by the board."),
+        content: text(entry?.content ?? prdSections[index]?.content, "Not specified by the board."),
       };
     }),
     pitchDeck: DECK_SLIDES.map((slideName, index) => {
-      const entry = (raw.pitchDeck ?? [])[index];
+      const entry = slides[index];
       const fallbackTitle = index === 0 ? input.startupName : slideName;
-      const bullets = (entry?.bullets ?? [])
+      const bullets = asArray(entry?.bullets)
         .map((bullet) => String(bullet).trim())
         .filter((bullet) => bullet.length > 0);
       return {
