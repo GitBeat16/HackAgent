@@ -1,0 +1,258 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * BoardroomAI — "Ink & Brass" design tokens.
+ * HSL triplets (no `hsl()` wrapper) so Tailwind can compose them with
+ * opacity modifiers, e.g. bg-primary/40.
+ */
+@layer base {
+  :root {
+    --shadow-color: 222 40% 2%;
+
+    /* Dark theme — default and primary experience. A boardroom is lit,
+       not lightless: background is tinted ink-navy, never true black. */
+    --background: 224 24% 7%;
+    --foreground: 40 24% 93%;
+
+    --surface: 222 20% 10%;
+    --surface-elevated: 222 18% 13%;
+    --surface-overlay: 222 20% 15%;
+
+    --border: 222 16% 20%;
+    --border-strong: 222 16% 28%;
+    --input: 222 16% 22%;
+    --ring: 32 45% 58%;
+
+    /* Brass — primary accent. Warm, desaturated metal, not clay/terracotta. */
+    --brass: 32 42% 58%;
+    --brass-foreground: 224 30% 8%;
+    --brass-muted: 32 30% 30%;
+
+    /* Signal — reserved exclusively for AI-originated content: agent
+       avatars, live/streaming indicators, generated-copy call-outs. */
+    --signal: 217 79% 66%;
+    --signal-foreground: 224 30% 8%;
+    --signal-muted: 217 40% 28%;
+
+    --secondary: 222 16% 16%;
+    --secondary-foreground: 40 24% 93%;
+
+    --muted: 222 14% 16%;
+    --muted-foreground: 220 10% 62%;
+
+    --accent: 222 18% 18%;
+    --accent-foreground: 40 24% 93%;
+
+    --destructive: 356 72% 58%;
+    --destructive-foreground: 40 24% 96%;
+
+    --success: 152 48% 45%;
+    --success-foreground: 224 30% 8%;
+
+    --warning: 38 88% 58%;
+    --warning-foreground: 224 30% 8%;
+
+    /* Chart series — ordered so adjacent series are always distinguishable
+       at a glance, brass/signal first since they carry brand meaning. */
+    --chart-1: 32 42% 58%;
+    --chart-2: 217 79% 66%;
+    --chart-3: 152 48% 45%;
+    --chart-4: 280 45% 68%;
+    --chart-5: 38 88% 58%;
+
+    --radius: 0.875rem;
+  }
+
+  /* Optional light theme — kept for completeness/accessibility preference,
+     not the primary showcase surface. Same hue anchors, inverted lightness. */
+  .light {
+    --shadow-color: 32 20% 60%;
+
+    --background: 42 30% 97%;
+    --foreground: 224 24% 12%;
+
+    --surface: 0 0% 100%;
+    --surface-elevated: 40 30% 98%;
+    --surface-overlay: 0 0% 100%;
+
+    --border: 32 16% 86%;
+    --border-strong: 32 16% 76%;
+    --input: 32 16% 84%;
+    --ring: 32 55% 42%;
+
+    --brass: 32 55% 42%;
+    --brass-foreground: 40 30% 98%;
+    --brass-muted: 32 40% 88%;
+
+    --signal: 217 70% 52%;
+    --signal-foreground: 40 30% 98%;
+    --signal-muted: 217 60% 90%;
+
+    --secondary: 32 20% 93%;
+    --secondary-foreground: 224 24% 12%;
+
+    --muted: 32 16% 92%;
+    --muted-foreground: 222 10% 40%;
+
+    --accent: 32 20% 91%;
+    --accent-foreground: 224 24% 12%;
+
+    --destructive: 356 68% 46%;
+    --destructive-foreground: 40 30% 98%;
+
+    --success: 152 48% 34%;
+    --success-foreground: 40 30% 98%;
+
+    --warning: 38 80% 44%;
+    --warning-foreground: 40 30% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+
+  .light {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Visible, deliberate focus states everywhere — never suppressed. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background rounded-sm;
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Glassmorphism surface — the recurring "boardroom glass table" material.
+     Used sparingly: nav, dialogs, and one hero moment, never every card. */
+  .glass {
+    @apply bg-surface/60 backdrop-blur-xl backdrop-saturate-150 border border-border/60;
+  }
+
+  .glass-elevated {
+    @apply bg-surface-elevated/70 backdrop-blur-2xl backdrop-saturate-150 border border-border-strong/50;
+  }
+
+  /* Subtle film-grain, layered over gradients so large brass/signal glows
+     don't look like flat digital gradients. */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Skeleton shimmer sweep, tuned to the ink/brass palette rather than a
+     generic grey-on-grey shimmer. */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      110deg,
+      hsl(var(--muted)) 8%,
+      hsl(var(--surface-elevated)) 18%,
+      hsl(var(--muted)) 33%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Print — the report's "Export PDF" button is `window.print()`, so the
+   browser's own print pipeline IS the exporter. That only produces a
+   usable document if the app chrome gets out of the way: without this,
+   the PDF contains the sidebar, the navbar and an "Export PDF" button,
+   and the report itself is squeezed into a column on the right.
+
+   Printed on white regardless of theme — the dark palette burns ink and
+   renders unreadably on paper.
+   --------------------------------------------------------------------- */
+@media print {
+  aside,
+  header,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* The app shell pins everything to the viewport and scrolls internally.
+     For print the document must be allowed to flow to whatever height it
+     needs, or only the first screenful is captured. */
+  html,
+  body,
+  main,
+  main > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /* Cards keep their structure but lose the glow and the dark fill. */
+  [class*="rounded-xl"],
+  [class*="rounded-lg"] {
+    box-shadow: none !important;
+  }
+
+  /* Keep a section and its heading together, and never split a vote card
+     or a chart across a page boundary. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  li,
+  figure,
+  table {
+    break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    color: #555;
+  }
+}
