@@ -523,3 +523,69 @@ export async function generateDeliverables(input: DeliverablesInput): Promise<Ge
 
   return normalise(raw, input);
 }
+export interface GeneratedProcurementDeliverables {
+  pilotAgreement: {
+    content: string;
+  };
+  impactAssessment: {
+    metrics: Array<{ metric: string; before: string; after: string; confidence: string }>;
+  };
+  riskRegister: {
+    risks: Array<{ risk: string; likelihood: string; impact: string; mitigation: string }>;
+  };
+}
+
+export async function generateProcurementDeliverables(options: {
+  startupName: string;
+  challengeTitle: string;
+  proposalText: string;
+}): Promise<GeneratedProcurementDeliverables> {
+  const schema: JsonSchema = {
+    type: "object",
+    properties: {
+      pilotAgreement: { type: "object", properties: { content: { type: "string" } } },
+      impactAssessment: {
+        type: "object",
+        properties: {
+          metrics: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                metric: { type: "string" },
+                before: { type: "string" },
+                after: { type: "string" },
+                confidence: { type: "string", enum: ["Low", "Medium", "High"] }
+              }
+            }
+          }
+        }
+      },
+      riskRegister: {
+        type: "object",
+        properties: {
+          risks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                risk: { type: "string" },
+                likelihood: { type: "string", enum: ["Low", "Medium", "High"] },
+                impact: { type: "string", enum: ["Low", "Medium", "High"] },
+                mitigation: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const deliverables = await generateJson<any>({
+    systemPrompt: "You generate standardized public procurement templates based on the startup's proposal.",
+    turns: [{ role: "user", content: `Startup: ${options.startupName}\nChallenge: ${options.challengeTitle}\nProposal: ${options.proposalText}` }],
+    responseSchema: schema
+  });
+
+  return deliverables as GeneratedProcurementDeliverables;
+}

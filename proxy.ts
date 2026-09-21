@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/supabase/proxy";
 
 const protectedPrefixes = [
@@ -14,7 +14,7 @@ const protectedPrefixes = [
   "/market-research",
   "/startup-health",
   "/prd-generator",
-  "/pitch-deck",
+  "/pitch-deck", "/marketplace", "/challenges", "/my-proposals", "/admin",
 ];
 
 export async function proxy(request: NextRequest) {

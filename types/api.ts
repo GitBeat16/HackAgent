@@ -1,7 +1,7 @@
-/**
+﻿/**
  * API contracts. Route handlers under `app/api` build responses
  * shaped like these; feature `service.ts` files (client side) parse
- * responses typed as these. Keep this file the single source of truth —
+ * responses typed as these. Keep this file the single source of truth â€”
  * if a field changes here, both sides feel it via a type error, not a
  * silent runtime mismatch.
  */
@@ -20,7 +20,7 @@ export interface CreatePitchRequest {
   industry: string;
   stage: string;
   pitch: string;
-  /** Executive persona ids to seat for this session — see lib/ai/executives.ts. */
+  /** Executive persona ids to seat for this session â€” see lib/ai/executives.ts. */
   executiveIds: string[];
 }
 
@@ -65,7 +65,7 @@ export interface MeetingResponse {
   industry: string;
   stage: string;
   status: MeetingStatus;
-  /** Seated persona ids, in seating order — see lib/ai/executives.ts. */
+  /** Seated persona ids, in seating order â€” see lib/ai/executives.ts. */
   executiveIds: string[];
   transcript: MeetingTranscriptMessage[];
   /** Present once at least one executive has voted. */
@@ -75,7 +75,7 @@ export interface MeetingResponse {
 }
 
 export interface AdvanceDebateRequest {
-  /** Optional founder reply to the board's last question — omit to let the next executive speak unprompted. */
+  /** Optional founder reply to the board's last question â€” omit to let the next executive speak unprompted. */
   founderMessage?: string;
 }
 
@@ -83,13 +83,13 @@ export interface AdvanceDebateRequest {
  * Why the board handed the floor to whoever just spoke.
  *
  * Returned per turn so the UI can show the reasoning rather than just the
- * outcome — the selection being explainable is most of what distinguishes
+ * outcome â€” the selection being explainable is most of what distinguishes
  * orchestration from a shuffle.
  */
 export interface SpeakerSelectionInfo {
   phase: "opening" | "cross_examination" | "closing";
   topic: string;
-  /** 0–1 certainty in the topic read. Low means fairness decided the turn. */
+  /** 0â€“1 certainty in the topic read. Low means fairness decided the turn. */
   topicConfidence: number;
   /** Best-scoring candidates, highest first. */
   ranking: Array<{
@@ -142,7 +142,7 @@ export interface ReportListResponse {
 }
 
 // Full report detail reuses features/reports/types.ts's ReportDetail shape
-// server-side — see lib/server/reports.ts.
+// server-side â€” see lib/server/reports.ts.
 
 // ---- Executives -----------------------------------------------------------
 
@@ -167,4 +167,101 @@ export interface HistoryListResponse {
     timestamp: string;
     changeType: "Report" | "Pitch deck" | "PRD" | "Financials";
   }>;
+}
+import { z } from 'zod';
+
+export type UserRole = "startup_founder" | "department_officer" | "platform_admin";
+
+export const CreateChallengeRequestSchema = z.object({
+  title: z.string().min(10).max(200),
+  description: z.string().min(50).max(5000),
+  domain: z.enum(['transport', 'agriculture', 'health', 'education', 'urban', 'other', 'technology']),
+  budgetInr: z.number().int().positive().optional(),
+  deadline: z.string().datetime().optional(),
+  eligibilityNotes: z.string().optional()
+});
+export type CreateChallengeRequest = z.infer<typeof CreateChallengeRequestSchema>;
+
+export interface ChallengeDetailResponse {
+  id: string;
+  departmentId: string;
+  title: string;
+  description: string;
+  domain: string;
+  budgetInr?: number;
+  deadline?: string;
+  eligibilityNotes?: string;
+  status: 'draft'|'open'|'closed'|'archived';
+  createdAt: string;
+}
+
+export interface ChallengeListResponse {
+  challenges: ChallengeDetailResponse[];
+}
+
+export const CreateProposalRequestSchema = z.object({
+  proposalText: z.string().min(200).max(5000),
+});
+export type CreateProposalRequest = z.infer<typeof CreateProposalRequestSchema>;
+
+export interface ProposalDetailResponse {
+  id: string;
+  challengeId: string;
+  startupId: string;
+  status: 'submitted'|'evaluating'|'evaluated'|'approved'|'rejected'|'pilot_active'|'completed'|'archived';
+  proposalText: string;
+  aiMatchScore?: number;
+  meetingId?: string;
+  reportId?: string;
+  submittedAt: string;
+}
+
+export interface ProposalListResponse {
+  proposals: ProposalDetailResponse[];
+}
+
+export const ApproveProposalRequestSchema = z.object({
+  milestones: z.array(z.object({
+    title: z.string(),
+    description: z.string(),
+    paymentInr: z.number().int().positive(),
+    dueDate: z.string().datetime().optional()
+  }))
+});
+export type ApproveProposalRequest = z.infer<typeof ApproveProposalRequestSchema>;
+
+export const RejectProposalRequestSchema = z.object({
+  reason: z.string()
+});
+export type RejectProposalRequest = z.infer<typeof RejectProposalRequestSchema>;
+
+export interface MilestoneDetail {
+  id: string;
+  proposalId: string;
+  title: string;
+  description: string;
+  paymentInr: number;
+  dueDate?: string;
+  status: 'pending'|'evidence_submitted'|'approved'|'rejected';
+  evidenceUrl?: string;
+}
+
+export interface MilestoneListResponse {
+  milestones: MilestoneDetail[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorId: string;
+  actorRole: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  oldValue?: any;
+  newValue?: any;
+  createdAt: string;
+}
+
+export interface AuditLogListResponse {
+  logs: AuditLogEntry[];
 }

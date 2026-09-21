@@ -1,4 +1,4 @@
-export interface WorkspaceResponse {
+﻿export interface WorkspaceResponse {
   profile: {
     displayName: string | null;
     email: string | null;

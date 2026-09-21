@@ -726,3 +726,112 @@ export async function generateVerdict(input: VerdictInput): Promise<GeneratedVer
     },
   };
 }
+export const PROCUREMENT_VERDICTS = ["Recommend Pilot", "Conditional Pilot", "Reject"] as const;
+export const PROCUREMENT_DIMENSIONS = ["Technical Feasibility", "Financial Compliance", "Legal & IP", "Social Impact", "Operational Risk"] as const;
+
+export interface GeneratedProcurementVerdict {
+  votes: ExecutiveVoteDetail[];
+  report: Omit<ReportDetail, "id" | "generatedAt"> & { procurementScore?: number, pilotRecommendations?: any[] };
+}
+
+export async function generateProcurementVerdict(options: {
+  startupName: string;
+  oneLiner: string;
+  industry: string;
+  stage: string;
+  pitch: string;
+  seatedExecutiveIds: string[];
+  transcript: MeetingTranscriptMessage[];
+  sources: ReportSource[];
+}): Promise<GeneratedProcurementVerdict> {
+  const systemPrompt = `You are the synthesis engine for a government procurement board.
+Review the provided transcript where expert assessors evaluated a startup's pilot proposal.
+Produce a structured procurement report.`;
+
+  const transcriptText = options.transcript.map((m) => `${m.speakerName} (${m.role}): ${m.message}`).join("\n\n");
+
+  const verdictSchema: JsonSchema = {
+    type: "object",
+    properties: {
+      procurementScore: { type: "integer", description: "0-100 score" },
+      verdict: { type: "string", enum: [...PROCUREMENT_VERDICTS] },
+      executiveSummary: { type: "string" },
+      swot: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", enum: [...SWOT_TITLES] },
+            items: { type: "array", items: { type: "string" } }
+          }
+        }
+      },
+      dimensions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            dimension: { type: "string", enum: [...PROCUREMENT_DIMENSIONS] },
+            score: { type: "integer" }
+          }
+        }
+      },
+      pilotRecommendations: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            milestone: { type: "string" },
+            metric: { type: "string" },
+            paymentPercent: { type: "integer" }
+          }
+        }
+      },
+      votes: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            executiveId: { type: "string" },
+            vote: { type: "string", enum: ["yes", "no", "conditional"] },
+            rationale: { type: "string" }
+          }
+        }
+      }
+    }
+  };
+
+  const verdict = await generateJson<any>({
+    systemPrompt,
+    turns: [{ role: "user", content: `Evaluate this pitch for ${options.startupName}: ${options.pitch}\n\nDebate:\n${transcriptText}` }],
+    responseSchema: verdictSchema
+  });
+
+  return {
+    votes: (verdict.votes || []).map((v: any) => ({
+      executiveId: v.executiveId || "unknown",
+      vote: v.vote || "conditional",
+      rationale: v.rationale || ""
+    })),
+    report: {
+      startupName: options.startupName,
+      oneLiner: options.oneLiner,
+      industry: options.industry,
+      investmentScore: verdict.procurementScore || 50,
+      procurementScore: verdict.procurementScore || 50,
+      verdict: verdict.verdict || "Conditional Pilot",
+      executiveSummary: verdict.executiveSummary || "",
+      swot: (verdict.swot || []).map((s: any) => ({ title: s.title as any, items: s.items || [] })),
+      dimensions: (verdict.dimensions || []).map((d: any) => ({ dimension: d.dimension, score: d.score || 50 })),
+      risks: [],
+      financials: [],
+      consensus: [],
+      disagreements: [],
+      riskTimeline: [],
+      nextSteps: [],
+      roadmap: [],
+      sources: options.sources,
+      pilotRecommendations: verdict.pilotRecommendations || []
+    } as any
+  };
+}

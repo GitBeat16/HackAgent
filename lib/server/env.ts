@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Server-only env access. Import `serverEnv` instead of reading
  * `process.env` directly in route handlers or server-side lib code, so a
  * missing variable fails immediately with a clear message instead of
  * surfacing as a confusing downstream error (e.g. a 401 from the AI
  * provider three files away from where the key was actually missing).
  *
- * This file must never be imported from a Client Component — it will
+ * This file must never be imported from a Client Component â€” it will
  * throw at import time if required variables are absent, which is the
  * point, but that means it belongs in route handlers / `lib/server`
  * only.
@@ -39,12 +39,12 @@ function optionalEnv(name: string): string | undefined {
 /**
  * Default model for every executive persona and every generated deliverable.
  * Chosen for breadth of availability across Groq accounts rather than raw
- * capability — override with `GROQ_MODEL` to pin something else.
+ * capability â€” override with `GROQ_MODEL` to pin something else.
  */
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
 /**
- * Debate turns are the bulk of a session's traffic — one call per executive
+ * Debate turns are the bulk of a session's traffic â€” one call per executive
  * per round, versus two calls total for the write-up. They are also the
  * easiest work in the app: a three-sentence in-character reaction. Running
  * them on a small model cuts the dominant cost and, because Groq meters
@@ -71,7 +71,7 @@ export const serverEnv = {
   },
   /**
    * Optional web-search key for the evidence-facing seats. Absent, the board
-   * still runs — the Research and VC agents are told to label every figure as
+   * still runs â€” the Research and VC agents are told to label every figure as
    * their own estimate instead of citing a source they do not have.
    * Free tier: 1,000 searches a month at https://tavily.com
    */
@@ -82,6 +82,15 @@ export const serverEnv = {
   get blobReadWriteToken() {
     return optionalEnv("BLOB_READ_WRITE_TOKEN");
   },
+
+  /** Startup India API (for DPIIT number verification) */
+  get startupIndiaApiKey() {
+    return optionalEnv('STARTUP_INDIA_API_KEY');
+  },
+  /** GeM marketplace base URL */
+  get gemBaseUrl() {
+    return optionalEnv('GEM_BASE_URL') ?? 'https://gem.gov.in';
+  },
 } as const;
 
 /** True when the board can retrieve real external data rather than estimate. */
@@ -91,7 +100,7 @@ export function isResearchConfigured() {
 
 /**
  * Cheap, non-throwing check for callers that must degrade gracefully
- * rather than fail — `/api/health`, or a debate turn that should return a
+ * rather than fail â€” `/api/health`, or a debate turn that should return a
  * clear "AI not configured" error instead of a 500.
  */
 export function isAiConfigured() {
