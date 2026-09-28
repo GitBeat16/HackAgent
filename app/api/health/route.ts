@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isAiConfigured } from "@/lib/server/env";
-import { isPiperAvailable } from "@/lib/speech/piper";
+import { createClient } from "@/lib/supabase/server";
 
-/** Piper's check touches the filesystem, which the edge runtime cannot do. */
 export const runtime = "nodejs";
 
-/** Unauthenticated on purpose: it reports whether the app is configured, never any data. */
 export async function GET() {
+  const supabase = await createClient();
+  let procurementMigrated = false;
+  
+  if (db.isConfigured) {
+    try {
+      const { data, error } = await supabase.from('procurement_proposals').select('id').limit(1);
+      procurementMigrated = !error;
+    } catch {
+      procurementMigrated = false;
+    }
+  }
+
   return NextResponse.json({
     status: "ok",
     dbConfigured: db.isConfigured,
     aiConfigured: isAiConfigured(),
-    // False is not an error: the board falls back to Edge and then to the
-    // browser's own voice. It answers "why does this deploy sound different".
-    piperAvailable: isPiperAvailable(),
+    procurementMigrated,
     timestamp: new Date().toISOString(),
   });
 }

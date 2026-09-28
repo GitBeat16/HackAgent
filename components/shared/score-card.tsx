@@ -29,7 +29,7 @@ const sizeConfig = {
 
 /**
  * The "Roundtable Ring" — this project's signature visual element. Every
- * verdict a board of executives produces (investment score, confidence,
+ * verdict a board of executives produces (Feasibility score, confidence,
  * health) resolves to a number out of 100 read as a ring, echoing the
  * shape of the boardroom table itself. Reused (at smaller sizes) inside
  * ExecutiveCard's confidence indicator so the motif recurs, not repeats.
@@ -75,3 +75,4 @@ export function ScoreCard({ label, score, verdict, tone = "brass", size = "md", 
     </div>
   );
 }
+

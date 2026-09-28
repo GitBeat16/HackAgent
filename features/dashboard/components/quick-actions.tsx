@@ -3,7 +3,7 @@ import { Compass, FileBarChart, Users, Presentation } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 const actions = [
-  { label: "New meeting", description: "Pitch a new idea to the board", href: "/meeting/new", icon: Compass },
+  { label: "New meeting", description: "Pitch a new idea to the board", href: "/challenges/new", icon: Compass },
   { label: "Reports", description: "Browse past board decisions", href: "/reports", icon: FileBarChart },
   { label: "Executives", description: "Manage your board's persona mix", href: "/executives", icon: Users },
   { label: "Pitch deck", description: "Generate a founder-ready deck", href: "/pitch-deck", icon: Presentation },
@@ -28,3 +28,4 @@ export function QuickActions() {
     </div>
   );
 }
+

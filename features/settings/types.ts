@@ -17,7 +17,7 @@ export const notificationOptions: NotificationOption[] = [
   },
   {
     id: "score-change",
-    label: "Investment score changes",
+    label: "Feasibility score changes",
     description: "Alert me when a report is regenerated with a new score.",
   },
   {
@@ -31,3 +31,4 @@ export const notificationOptions: NotificationOption[] = [
     description: "Let me know when a new agent is added to the board.",
   },
 ];
+

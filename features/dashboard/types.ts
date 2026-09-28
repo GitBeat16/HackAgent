@@ -11,7 +11,7 @@ export interface RecentMeeting {
   startupName: string;
   oneLiner: string;
   status: "in-progress" | "completed" | "scheduled";
-  investmentScore?: number;
+  feasibilityScore?: number;
   /** Set once the session produced a report — report ids differ from meeting ids. */
   reportId?: string;
   updatedAt: string;
@@ -29,3 +29,4 @@ export interface ScoreTrendPoint {
   month: string;
   score: number;
 }
+

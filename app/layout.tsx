@@ -5,8 +5,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "BoardroomAI",
-    template: "%s · BoardroomAI",
+    default: "HackAgent Procurement",
+    template: "%s · HackAgent Procurement",
   },
   description: "Pitch your startup to a virtual board of AI executives.",
 };
@@ -26,3 +26,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+

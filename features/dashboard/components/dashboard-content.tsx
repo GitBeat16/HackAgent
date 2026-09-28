@@ -2,76 +2,66 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ClipboardCheck, FileBarChart, Percent } from "lucide-react";
+import { Building2, FileText, ArrowRight, UserCircle } from "lucide-react";
 import { SectionHeader } from "@/components/shared/section-header";
-import { MetricCard } from "@/components/shared/metric-card";
 import { Button } from "@/components/ui/button";
-import { QuickActions } from "@/features/dashboard/components/quick-actions";
-import { ScoreTrendChart } from "@/features/dashboard/components/score-trend-chart";
-import { RecentMeetings } from "@/features/dashboard/components/recent-meetings";
-import { ActivityFeed } from "@/features/dashboard/components/activity-feed";
-import { ErrorState } from "@/components/shared/error-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { fetchDashboard, type DashboardResponse } from "@/features/dashboard/service";
-
-const metricIcons = [ClipboardCheck, FileBarChart, Percent, ArrowUpRight];
+import { createClient } from "@/lib/supabase/client";
 
 export function DashboardContent({ userName }: { userName: string }) {
-  const [data, setData] = useState<DashboardResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDashboard()
-      .then(setData)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        supabase.from('profiles').select('role').eq('id', data.user.id).single().then((res) => {
+          setRole(res.data?.role || null);
+        });
+      }
+    });
   }, []);
 
-  if (loading) {
-    return (
-      <div className="space-y-10">
-        <Skeleton className="h-24 w-full" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-28" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return <ErrorState description={error ?? "Dashboard data is unavailable."} onRetry={() => window.location.reload()} />;
-  }
-
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 max-w-5xl mx-auto py-8">
       <SectionHeader
-        eyebrow="Overview"
-        title={`Good morning, ${userName}`}
-        description="Two board sessions are active. Here's where every pitch in motion stands."
-        action={
-          <Button asChild>
-            <Link href="/meeting/new">New meeting</Link>
-          </Button>
-        }
+        eyebrow="Platform Overview"
+        title={`Welcome to HackAgent, ${userName}`}
+        description="The SIH 26136 Official Platform for Government-Startup Innovation."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {data.metrics.map((metric, index) => (
-          <MetricCard key={metric.label} label={metric.label} value={metric.value} trend={metric.trend} icon={metricIcons[index]} />
-        ))}
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="border border-border rounded-xl p-6 bg-surface/50">
+          <Building2 className="w-8 h-8 text-primary mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Government Officials</h2>
+          <p className="text-muted-foreground mb-6 text-sm">
+            Define outcome-based problem statements and evaluate innovative solutions from startups using our AI panel.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button asChild className="w-full justify-between" disabled={role === 'startup_founder'}>
+              <Link href="/challenges/new">Post a New Challenge <ArrowRight className="w-4 h-4" /></Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="border border-border rounded-xl p-6 bg-surface/50">
+          <FileText className="w-8 h-8 text-primary mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Startups & Innovators</h2>
+          <p className="text-muted-foreground mb-6 text-sm">
+            Discover public challenges, submit pilot proposals, and fast-track your government contracts.
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button asChild className="w-full justify-between" variant="secondary" disabled={role === 'department_officer'}>
+              <Link href="/marketplace">Browse Challenge Marketplace <ArrowRight className="w-4 h-4" /></Link>
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <QuickActions />
-
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <ScoreTrendChart data={data.scoreTrend} />
-        <ActivityFeed items={data.recentActivity} />
+      <div className="pt-8 flex justify-center">
+        <Button variant="outline" asChild>
+          <Link href="/settings"><UserCircle className="w-4 h-4 mr-2" /> Complete your Profile</Link>
+        </Button>
       </div>
-
-      <RecentMeetings meetings={data.recentMeetings} />
     </div>
   );
 }

@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
-import { isMissingColumn, warnSchemaBehind } from "@/lib/server/schema-drift";
+﻿import { createClient } from "@/lib/supabase/server";
+
 import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage } from "@/types/api";
 import type { BoardVote } from "@/lib/ai/report-generator";
-import type { ExecutiveVoteDetail } from "@/features/reports/types";
+import type { ExecutiveVoteDetail } from "@/types/report";
 
 type MeetingRow = {
   id: string;
@@ -60,7 +60,7 @@ async function selectMeetings<T>(
 ): Promise<T | null> {
   const full = await build(MEETING_SELECT);
   if (!full.error) return full.data;
-  if (!isMissingColumn(full.error)) throw new Error(full.error.message ?? "Could not load meeting.");
+  
 
   const fallback = await build(BASE_MEETING_SELECT);
   if (fallback.error) throw new Error(fallback.error.message ?? "Could not load meeting.");
@@ -175,7 +175,7 @@ export async function appendTranscriptMessage(meetingId: string, message: Meetin
   // Same reasoning as `selectMeetings`: on a database that has not taken the
   // fact-check migration, losing the verification field is acceptable —
   // losing the executive's turn is not.
-  if (!isMissingColumn(error)) throw new Error(error.message);
+  
   const retry = await supabase.from("messages").insert(base);
   if (retry.error) throw new Error(retry.error.message);
 }
@@ -215,9 +215,9 @@ export async function recordVotes(meetingId: string, votes: ExecutiveVoteDetail[
 
   const full = await save(detail);
   if (!full.error) return;
-  if (!isMissingColumn(full.error)) throw new Error(full.error.message);
+  
 
-  warnSchemaBehind("votes", full.error.message);
+  
 
   const bare = await save(core);
   if (bare.error) throw new Error(bare.error.message);

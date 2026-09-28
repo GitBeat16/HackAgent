@@ -6,7 +6,7 @@ import type { ScoreTrendPoint } from "@/features/dashboard/types";
 
 export function ScoreTrendChart({ data }: { data: ScoreTrendPoint[] }) {
   return (
-    <ChartWrapper title="Average investment score" description="Across all completed board sessions" height={260}>
+    <ChartWrapper title="Average Feasibility score" description="Across all completed board sessions" height={260}>
       <AreaChart data={data.length ? data : [{ month: "—", score: 0 }]} margin={{ left: -16, right: 8, top: 8 }}>
         <defs>
           <linearGradient id="scoreFill" x1="0" y1="0" x2="0" y2="1">
@@ -31,3 +31,4 @@ export function ScoreTrendChart({ data }: { data: ScoreTrendPoint[] }) {
     </ChartWrapper>
   );
 }
+

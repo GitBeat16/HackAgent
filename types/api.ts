@@ -1,51 +1,112 @@
-/**
- * API contracts. Route handlers under `app/api` build responses
- * shaped like these; feature `service.ts` files (client side) parse
- * responses typed as these. Keep this file the single source of truth —
- * if a field changes here, both sides feel it via a type error, not a
- * silent runtime mismatch.
- */
-
-export interface ApiError {
+﻿export interface ApiError {
   error: string;
-  /** Machine-readable code for client-side branching (e.g. "NOT_FOUND"). */
   code?: string;
+  details?: Record<string, unknown>;
 }
 
-// ---- Pitches / meetings ----------------------------------------------
+// ---- Challenges ----
+export interface CreateChallengeRequest {
+  title: string;
+  description: string;
+  domain: string;
+  budgetInr?: string;
+  deadline?: string;
+  datasetFile?: File; // For FormData
+}
+export interface CreateChallengeResponse {
+  success: boolean;
+  id: string;
+}
 
+// ---- Proposals ----
+export interface SubmitProposalRequest {
+  proposalText: string;
+}
+export interface SubmitProposalResponse {
+  success: boolean;
+  id: string;
+}
+
+export interface PilotKPI {
+  name: string;
+  baseline: string;
+  target: string;
+  unit: string;
+}
+
+export interface MilestoneInput {
+  title: string;
+  description: string;
+  payment_inr: number;
+  due_date: string;
+}
+
+export interface ApproveProposalRequest {
+  duration_weeks: number;
+  scope_description: string;
+  data_constraints: string;
+  kpis: PilotKPI[];
+  milestones: MilestoneInput[];
+  overrideReason?: string;
+}
+
+export interface RejectProposalRequest {
+  reason: string;
+}
+
+export interface ProposalPipelineResponse {
+  id: string;
+  startup_id: string;
+  status: string;
+  ai_match_score: number | null;
+  submitted_at: string;
+  profiles: {
+    startup_name: string;
+  };
+  milestones?: { title: string; description: string; paymentInr: number; dueDate?: string }[];
+}
+
+export interface MilestoneEvidenceRequest {
+  file: File;
+  documentTitle: string;
+}
+
+export interface AuditLogResponse {
+  id: string;
+  actor_id: string;
+  actor_role: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  old_value: unknown;
+  new_value: unknown;
+  created_at: string;
+  profiles?: {
+    startup_name?: string;
+    department_name?: string;
+    role: string;
+  };
+}
+
+// ---- Legacy BoardroomAI (Engine internals) ----
 export interface CreatePitchRequest {
   startupName: string;
   oneLiner: string;
   industry: string;
   stage: string;
   pitch: string;
-  /** Executive persona ids to seat for this session — see lib/ai/executives.ts. */
   executiveIds: string[];
 }
-
 export interface CreatePitchResponse {
   meetingId: string;
   status: "queued" | "in-progress";
 }
-
 export type MeetingStatus = "scheduled" | "in-progress" | "completed";
-
-/**
- * Fact-check outcome for a single turn.
- *
- * Present only on turns that had retrieved evidence to check against, which
- * is a small minority. Absent means "never checked", which is deliberately
- * distinct from "checked and clean".
- */
 export interface MessageVerification {
-  /** Figures that appear in a retrieved source. */
   supported: string[];
-  /** Figures the executive stated that no source backs. */
   unsupported: string[];
   checked: boolean;
 }
-
 export interface MeetingTranscriptMessage {
   id: string;
   speakerId: string;
@@ -55,9 +116,7 @@ export interface MeetingTranscriptMessage {
   createdAt: string;
   verification?: MessageVerification;
 }
-
 export type BoardVote = "yes" | "no" | "conditional";
-
 export interface MeetingResponse {
   id: string;
   startupName: string;
@@ -65,33 +124,18 @@ export interface MeetingResponse {
   industry: string;
   stage: string;
   status: MeetingStatus;
-  /** Seated persona ids, in seating order — see lib/ai/executives.ts. */
   executiveIds: string[];
   transcript: MeetingTranscriptMessage[];
-  /** Present once at least one executive has voted. */
   votes?: Record<string, BoardVote>;
-  /** Present once the session has produced a final report. */
   reportId?: string;
 }
-
 export interface AdvanceDebateRequest {
-  /** Optional founder reply to the board's last question — omit to let the next executive speak unprompted. */
   founderMessage?: string;
 }
-
-/**
- * Why the board handed the floor to whoever just spoke.
- *
- * Returned per turn so the UI can show the reasoning rather than just the
- * outcome — the selection being explainable is most of what distinguishes
- * orchestration from a shuffle.
- */
 export interface SpeakerSelectionInfo {
   phase: "opening" | "cross_examination" | "closing";
   topic: string;
-  /** 0–1 certainty in the topic read. Low means fairness decided the turn. */
   topicConfidence: number;
-  /** Best-scoring candidates, highest first. */
   ranking: Array<{
     executiveId: string;
     score: number;
@@ -101,51 +145,30 @@ export interface SpeakerSelectionInfo {
     disagreement: number;
   }>;
 }
-
 export interface AdvanceDebateResponse {
-  /** The founder's own turn, echoed back when `founderMessage` was sent, so the client can persist the real id. */
   founderMessage?: MeetingTranscriptMessage;
-  /** Null once every seated executive has taken all of their turns. */
   message: MeetingTranscriptMessage | null;
-  /** True once the debate is over and the session is ready to be finalized. */
   isComplete: boolean;
-  /** Absent on the turn that ends the debate, since nobody was selected. */
   selection?: SpeakerSelectionInfo;
-  /**
-   * Set when the turn ended on a question aimed at the founder. The client
-   * holds the debate here so the founder can answer before the board moves on.
-   */
   founderQuestion?: string;
 }
-
 export interface FinalizeMeetingResponse {
   reportId: string;
-  investmentScore: number;
-  verdict: "Strong buy" | "Conditional" | "Pass";
+  feasibilityScore: number;
+  verdict: "Recommend Pilot" | "Conditional Pilot" | "Reject";
   votes: Record<string, BoardVote>;
-  /** False when the report saved but the studio deliverables could not be regenerated. */
-  deliverablesRefreshed: boolean;
 }
-
-// ---- Reports ------------------------------------------------------------
-
 export interface ReportListResponse {
   reports: Array<{
     id: string;
     startupName: string;
     oneLiner: string;
     industry: string;
-    investmentScore: number;
-    verdict: "Strong buy" | "Conditional" | "Pass";
+    feasibilityScore: number;
+    verdict: "Recommend Pilot" | "Conditional Pilot" | "Reject";
     generatedAt: string;
   }>;
 }
-
-// Full report detail reuses features/reports/types.ts's ReportDetail shape
-// server-side — see lib/server/reports.ts.
-
-// ---- Executives -----------------------------------------------------------
-
 export interface ExecutiveListResponse {
   executives: Array<{
     id: string;
@@ -156,9 +179,6 @@ export interface ExecutiveListResponse {
     focusAreas: string[];
   }>;
 }
-
-// ---- History --------------------------------------------------------------
-
 export interface HistoryListResponse {
   entries: Array<{
     id: string;

@@ -93,6 +93,7 @@ function LoginForm() {
       }
       if (data.session) {
         await ensureProfile(data.user!);
+        window.location.href = next;
         return;
       }
       setSuccess("Check your email to confirm your account, then sign in.");
@@ -105,7 +106,7 @@ function LoginForm() {
       setMessage(mapAuthError(error.message));
       return;
     }
-    if (data.user) await ensureProfile(data.user);
+    if (data.user) { await ensureProfile(data.user); window.location.href = next; }
   }
 
   return (
@@ -236,3 +237,6 @@ export default function LoginPage() {
     </Suspense>
   );
 }
+
+
+

@@ -1,7 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+﻿import { createClient } from "@/lib/supabase/server";
 import { executivePersonas } from "@/lib/ai/executives";
-import { isMissingColumn, warnSchemaBehind } from "@/lib/server/schema-drift";
-import type { ExecutiveVoteDetail, ReportDetail } from "@/features/reports/types";
+import type { ExecutiveVoteDetail, ReportDetail } from "@/types/report";
 
 /**
  * The report screens print `generatedAt` verbatim, so it is formatted here
@@ -176,12 +175,12 @@ export async function createReport(
     supabase.from("reports").upsert(row, { onConflict: "meeting_id" }).select("id").single();
 
   const full = await save({ ...core, ...analysis });
-  if (!isMissingColumn(full.error)) {
+  if (full.error) {
     if (full.error || !full.data) throw new Error(full.error?.message ?? "Could not save report.");
     return full.data.id;
   }
 
-  warnSchemaBehind("reports", full.error?.message);
+  
 
   const bare = await save(core);
   if (bare.error || !bare.data) throw new Error(bare.error?.message ?? "Could not save report.");

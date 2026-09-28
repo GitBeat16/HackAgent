@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Turns a finished debate into the board's verdict: a per-executive vote
  * and the full report the `/reports/[id]` screen renders.
  *
@@ -21,7 +21,7 @@ import type {
   RiskTimelineEntry,
   RoadmapStep,
   SwotSection,
-} from "@/features/reports/types";
+} from "@/types/report";
 import type { MeetingTranscriptMessage } from "@/types/api";
 
 export type BoardVote = "yes" | "no" | "conditional";

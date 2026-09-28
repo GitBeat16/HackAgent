@@ -44,8 +44,8 @@ export function RecentMeetings({ meetings }: { meetings: RecentMeeting[] }) {
                 <p className="truncate text-xs text-muted-foreground">{meeting.oneLiner}</p>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                {meeting.investmentScore !== undefined && (
-                  <span className="font-mono text-sm font-medium text-foreground">{meeting.investmentScore}</span>
+                {meeting.feasibilityScore !== undefined && (
+                  <span className="font-mono text-sm font-medium text-foreground">{meeting.feasibilityScore}</span>
                 )}
                 <Badge tone={statusTone[meeting.status]} pulse={meeting.status === "in-progress"}>
                   {statusLabel[meeting.status]}
@@ -59,3 +59,4 @@ export function RecentMeetings({ meetings }: { meetings: RecentMeeting[] }) {
     </Card>
   );
 }
+

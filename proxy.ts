@@ -9,12 +9,11 @@ const protectedPrefixes = [
   "/executives",
   "/history",
   "/settings",
-  "/kanban",
-  "/financials",
-  "/market-research",
-  "/startup-health",
-  "/prd-generator",
-  "/pitch-deck",
+  "/marketplace",
+  "/challenges",
+  "/my-proposals",
+  "/pipeline",
+  "/admin",
 ];
 
 export async function proxy(request: NextRequest) {

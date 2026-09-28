@@ -28,7 +28,7 @@ export function MarketingNavbar({ className }: { className?: string }) {
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Gavel className="size-4" />
           </span>
-          <span className="font-display text-lg font-medium tracking-tight">BoardroomAI</span>
+          <span className="font-display text-lg font-medium tracking-tight">HackAgent Procurement</span>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -48,7 +48,7 @@ export function MarketingNavbar({ className }: { className?: string }) {
             <Link href="/login">Sign in</Link>
           </Button>
           <Button size="sm" asChild>
-            <Link href="/login?next=/meeting/new">Start free</Link>
+            <Link href="/login?next=/dashboard">Start free</Link>
           </Button>
         </div>
 
@@ -81,7 +81,7 @@ export function MarketingNavbar({ className }: { className?: string }) {
                 <Link href="/login">Sign in</Link>
               </Button>
               <Button size="sm" asChild>
-                <Link href="/login?next=/meeting/new">Start free</Link>
+                <Link href="/login?next=/dashboard">Start free</Link>
               </Button>
             </div>
           </div>
@@ -90,3 +90,5 @@ export function MarketingNavbar({ className }: { className?: string }) {
     </header>
   );
 }
+
+
