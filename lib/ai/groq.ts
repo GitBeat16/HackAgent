@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from "@/lib/server/errors";
 /**
  * Groq transport. Calls Groq's OpenAI-compatible Chat Completions API
  * directly with `fetch` rather than pulling in an SDK — one less dependency
@@ -177,7 +178,7 @@ async function postOnce(body: Record<string, unknown>, signal?: AbortSignal) {
     });
   } catch (error) {
     throw new GroqError(
-      `Could not reach Groq: ${error instanceof Error ? error.message : "network error"}`,
+      `Could not reach Groq: ${getErrorMessage(error)}`,
     );
   }
 
@@ -331,3 +332,6 @@ export async function generateJson<T>(
 
   return parsed as T;
 }
+
+
+

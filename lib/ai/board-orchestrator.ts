@@ -46,12 +46,9 @@ Pitch: ${state.pitch}
 Review the pitch and debate its merits with the founder and colleagues. Keep it under 4 sentences.`;
 
   const replyText = await generateText({
-    messages: [
-      { role: "system", content: systemPrompt },
-      ...conversation
-    ],
+    systemPrompt, turns: conversation,
     temperature: 0.7,
-    max_tokens: 200,
+    maxOutputTokens: 200,
   });
 
   const message: MeetingTranscriptMessage = {
@@ -81,3 +78,6 @@ export function founderMessage(content: string): MeetingTranscriptMessage {
     createdAt: new Date().toISOString(),
   };
 }
+
+
+

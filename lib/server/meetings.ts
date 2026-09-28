@@ -1,7 +1,7 @@
 ﻿import { createClient } from "@/lib/supabase/server";
 
 import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage } from "@/types/api";
-import type { BoardVote } from "@/lib/ai/report-generator";
+import type { BoardVote } from "@/types/report";
 import type { ExecutiveVoteDetail } from "@/types/report";
 
 type MeetingRow = {
@@ -206,8 +206,8 @@ export async function recordVotes(meetingId: string, votes: ExecutiveVoteDetail[
     biggest_risk: vote.biggestRisk,
     biggest_strength: vote.biggestStrength,
     required_milestone: vote.requiredMilestone,
-    cheque_size: vote.chequeSize,
-    return_horizon: vote.returnHorizon,
+    
+    
   }));
 
   const save = (rows: Array<Record<string, unknown>>) =>
@@ -231,3 +231,4 @@ export async function completeMeeting(meetingId: string) {
     .eq("id", meetingId);
   if (error) throw new Error(error.message);
 }
+

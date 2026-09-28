@@ -45,8 +45,9 @@ export async function finalizeMeeting(userId: string, meetingId: string): Promis
 
   return {
     reportId,
-    feasibilityScore: report.investmentScore,
+    feasibilityScore: report.feasibilityScore,
     verdict: report.verdict,
     votes: Object.fromEntries(votes.map((vote) => [vote.executiveId, vote.vote])),
   };
 }
+
