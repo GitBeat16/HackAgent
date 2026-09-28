@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,7 @@ export function OfficerChallengeForm() {
       
       router.push('/dashboard');
     } catch (error: unknown) {
-      alert("Failed to create challenge: " + (error instanceof Error ? error.message : "Unknown error"));
+      toast.error("Failed to create challenge: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setLoading(false);
     }

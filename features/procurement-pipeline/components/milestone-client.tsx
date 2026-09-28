@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export function MilestoneClient({ milestone, isStartup }: { milestone: { id: string, title: string, description: string, payment_inr: number, status: string }, isStartup: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -23,7 +24,7 @@ export function MilestoneClient({ milestone, isStartup }: { milestone: { id: str
       if (!res.ok) throw new Error("Upload failed");
       window.location.reload();
     } catch (err: unknown) {
-      alert("Error: " + String((err as Record<string, unknown>).message));
+      toast.error("Error: " + String((err as Record<string, unknown>).message));
     } finally {
       setLoading(false);
     }

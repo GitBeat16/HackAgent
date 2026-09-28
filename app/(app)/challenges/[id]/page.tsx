@@ -1,4 +1,4 @@
-﻿
+
 import { requireUser } from "@/lib/server/auth";
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
@@ -34,7 +34,7 @@ export default async function ChallengeDetailPage({ params }: { params: { id: st
   // Fetch active/scaled pilots to show public KPIs
   const { data: activePilots } = await supabase
     .from("procurement_proposals")
-    .select("id, status, profiles(startup_name), pilot_plans(duration_weeks, pilot_kpis(name, baseline, target, actual, unit))")
+    .select("id, status, profiles(startup_name), pilot_plans(duration_weeks, pilot_kpis(name, baseline_value, target_value, actual_value, unit))")
     .eq("challenge_id", params.id)
     .in("status", ["pilot_active", "scaled", "completed"]);
 
@@ -60,7 +60,7 @@ export default async function ChallengeDetailPage({ params }: { params: { id: st
             <div className="bg-primary/10 p-3 rounded-lg"><IndianRupee className="text-primary" /></div>
             <div>
               <p className="text-sm text-muted-foreground">Budget Allocated</p>
-              <p className="font-semibold text-lg">{challenge.budget_inr ? `₹${challenge.budget_inr.toLocaleString('en-IN')}` : "TBD"}</p>
+              <p className="font-semibold text-lg">{challenge.budget_inr ? `\u20B9${challenge.budget_inr.toLocaleString('en-IN')}` : "TBD"}</p>
             </div>
           </CardContent>
         </Card>
@@ -89,25 +89,28 @@ export default async function ChallengeDetailPage({ params }: { params: { id: st
 
       {activePilots && activePilots.length > 0 && (
         <div className="pt-8 border-t space-y-6">
-          <h3 className="text-xl font-semibold">Active Pilots & Live KPIs</h3>
+          <h3 className="text-xl font-semibold">Active Pilots &amp; Live KPIs</h3>
           <div className="grid gap-6">
             {activePilots.map(pilot => {
-              const plan = pilot.pilot_plans?.[0];
+              const plan = (pilot.pilot_plans as { duration_weeks: number; pilot_kpis: { name: string; target_value: number; baseline_value: number; actual_value: number | null; unit: string }[] }[] | null)?.[0];
               if (!plan) return null;
+              const startupName = Array.isArray(pilot.profiles)
+                ? (pilot.profiles[0] as { startup_name: string } | undefined)?.startup_name
+                : (pilot.profiles as { startup_name: string } | null)?.startup_name;
               return (
                 <Card key={pilot.id} className="border-emerald-500/30">
                   <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-semibold text-lg">{(Array.isArray(pilot.profiles) ? pilot.profiles[0]?.startup_name : (pilot.profiles as unknown as { startup_name: string })?.startup_name)}</h4>
-                      <Badge tone="outline" className="text-emerald-500">{pilot.status.replace('_', ' ').toUpperCase()}</Badge>
+                      <h4 className="font-semibold text-lg">{startupName}</h4>
+                      <Badge tone="outline" className="text-emerald-500">{pilot.status.replace(/_/g, ' ').toUpperCase()}</Badge>
                     </div>
                     <div className="space-y-4">
-                      {plan.pilot_kpis?.map((kpi: { name: string; target: number; baseline: number; actual: number; unit: string }) => (
+                      {plan.pilot_kpis?.map(kpi => (
                         <div key={kpi.name} className="flex justify-between items-center bg-muted/20 p-3 rounded-lg text-sm">
                           <span className="font-medium">{kpi.name}</span>
                           <div className="text-right space-x-4">
-                            <span className="text-muted-foreground">Target: {kpi.target} {kpi.unit}</span>
-                            <span className="font-semibold">Actual: {kpi.actual !== null ? kpi.actual : "Pending"}</span>
+                            <span className="text-muted-foreground">Target: {kpi.target_value} {kpi.unit}</span>
+                            <span className="font-semibold">Actual: {kpi.actual_value !== null ? kpi.actual_value : "Pending"}</span>
                           </div>
                         </div>
                       ))}

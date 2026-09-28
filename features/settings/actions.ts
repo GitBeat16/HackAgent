@@ -22,7 +22,7 @@ export async function updateProfile(input: { displayName?: string; departmentNam
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const updates: Record<string, any> = {};
+  const updates: { display_name?: string; department_name?: string; startup_name?: string } = {};
   if (input.displayName !== undefined) updates.display_name = input.displayName;
   if (input.departmentName !== undefined) updates.department_name = input.departmentName;
   if (input.startupName !== undefined) updates.startup_name = input.startupName;

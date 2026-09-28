@@ -42,7 +42,7 @@ export function SettingsTabs() {
     setSaving(true);
     setSaveError(null);
     try {
-      const payload: any = { displayName };
+      const payload: { displayName?: string; departmentName?: string; startupName?: string } = { displayName };
       if (role === 'department_officer') payload.departmentName = orgName;
       if (role === 'startup') payload.startupName = orgName;
       await updateProfile(payload);

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/server/auth";
 import { queueAiEvaluation } from "@/lib/server/procurement";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         one_liner: proposal.challenges.title,
         industry: proposal.challenges.domain,
         pitch: proposal.proposal_text,
-        seated_executive_ids: ['tech_expert', 'finance_auditor', 'legal_compliance', 'impact_assessor', 'risk_officer']
+        seated_executive_ids: ['domain', 'finance', 'compliance', 'tech', 'scale']
       })
       .select('id')
       .single();
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Update state to Evaluating
-    await queueAiEvaluation(user.id, (await params).id);
+    await queueAiEvaluation(user.id, (await params).id, meeting.id);
 
     return NextResponse.json({ success: true, meetingId: meeting.id });
   } catch (error: unknown) {
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Unknown error") }, { status: (error as { code?: string })?.code === 'FORBIDDEN' ? 403 : 500 });
   }
 }
+
 
 
 

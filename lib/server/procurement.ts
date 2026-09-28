@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+﻿import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "./audit";
 
 export class ProcurementError extends Error {
@@ -6,6 +6,21 @@ export class ProcurementError extends Error {
     super(message);
     this.name = 'ProcurementError';
   }
+}
+
+function getChallengeDeptId(challenges: unknown): string | undefined {
+  if (Array.isArray(challenges)) return challenges[0]?.department_id;
+  return (challenges as { department_id?: string })?.department_id;
+}
+
+function getProposalStartupId(proposals: unknown): string | undefined {
+  if (Array.isArray(proposals)) return proposals[0]?.startup_id;
+  return (proposals as { startup_id?: string })?.startup_id;
+}
+
+function getProposalDeptId(proposals: unknown): string | undefined {
+  const proposal = Array.isArray(proposals) ? proposals[0] : proposals;
+  return getChallengeDeptId((proposal as { challenges?: unknown })?.challenges);
 }
 
 const PROPOSAL_TRANSITIONS: Record<string, Record<string, string[]>> = {
@@ -102,13 +117,15 @@ export async function uploadAuxiliaryDocument(
 ) {
   const supabase = await createClient();
 
-  const { data: proposal } = await supabase
+  const { data: proposal } = (await supabase
     .from('procurement_proposals')
     .select('id, challenge_id, challenges!inner(department_id)')
     .eq('id', proposalId)
-    .single();
+    .single()) as { data: { id: string; challenge_id: string; challenges: { department_id: string } | { department_id: string }[] } | null };
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  const deptId = Array.isArray(proposal?.challenges) ? proposal?.challenges[0]?.department_id : (proposal?.challenges as { department_id: string })?.department_id;
+
+  if (!proposal || deptId !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -132,7 +149,7 @@ export async function uploadAuxiliaryDocument(
 
 // ---------------- EVALUATION PIPELINE ----------------
 
-export async function queueAiEvaluation(officerId: string, proposalId: string) {
+export async function queueAiEvaluation(officerId: string, proposalId: string, meetingId?: string) {
   const supabase = await createClient();
   const { data: proposal } = await supabase
     .from('procurement_proposals')
@@ -140,13 +157,13 @@ export async function queueAiEvaluation(officerId: string, proposalId: string) {
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
   assertTransition('proposal', proposal.status, 'evaluating', 'department_officer');
 
-  const { error } = await supabase.from('procurement_proposals').update({ status: 'evaluating' }).eq('id', proposalId);
+  const { error } = await supabase.from('procurement_proposals').update({ status: 'evaluating', ...(meetingId ? { meeting_id: meetingId } : {}) }).eq('id', proposalId);
   if (error) throw new ProcurementError("DB Error", "DB_ERROR");
 
   await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'evaluating' });
@@ -160,7 +177,7 @@ export async function recordEvaluationResult(officerId: string, proposalId: stri
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -195,7 +212,7 @@ export async function approveProposalWithMilestones(
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -276,7 +293,7 @@ export async function rejectProposal(officerId: string, proposalId: string, reas
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -305,13 +322,13 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
   assertTransition('proposal', proposal.status, 'screened', 'department_officer');
 
-  const checks: any[] = [];
+  const checks: Array<{proposal_id: string; rule_name: string; passed: boolean; reason: string}> = [];
   checks.push({
     proposal_id: proposalId,
     rule_name: 'Data Protection Declaration',
@@ -335,7 +352,7 @@ export async function uploadMilestoneEvidence(startupId: string, milestoneId: st
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(startup_id)').eq('id', milestoneId).single();
   
-  if (!milestone || (milestone.procurement_proposals as any).startup_id !== startupId) {
+  if (!milestone || getProposalStartupId(milestone.procurement_proposals) !== startupId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -360,7 +377,7 @@ export async function validateMilestone(validatorId: string, milestoneId: string
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
   if (!milestone) throw new ProcurementError("Not found", "NOT_FOUND");
-  if ((milestone.procurement_proposals as any).challenges.department_id === validatorId) {
+  if (getProposalDeptId(milestone.procurement_proposals) === validatorId) {
     throw new ProcurementError("Approving officer cannot also validate", "FORBIDDEN");
   }
 
@@ -383,7 +400,7 @@ export async function signoffMilestone(officerId: string, milestoneId: string) {
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
-  if (!milestone || (milestone.procurement_proposals as any).challenges.department_id !== officerId) {
+  if (!milestone || getProposalDeptId(milestone.procurement_proposals) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -397,7 +414,7 @@ export async function releasePayment(officerId: string, milestoneId: string) {
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, payment_status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
-  if (!milestone || (milestone.procurement_proposals as any).challenges.department_id !== officerId) {
+  if (!milestone || getProposalDeptId(milestone.procurement_proposals) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -429,7 +446,7 @@ export async function recordScaleDecision(officerId: string, proposalId: string,
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+  if (!proposal || getChallengeDeptId(proposal.challenges) !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
@@ -449,3 +466,5 @@ export async function recordScaleDecision(officerId: string, proposalId: string,
   await supabase.from('procurement_proposals').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', proposalId);
   await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: nextStatus, decision, reason });
 }
+
+

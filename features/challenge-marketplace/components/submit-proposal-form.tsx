@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ export function SubmitProposalForm({ challengeId, submitAction }: { challengeId:
       await submitAction(sanitized);
       router.refresh();
     } catch (err: unknown) {
-      alert(String((err as Record<string, unknown>).message) || "Submission failed");
+      toast.error(String((err as Record<string, unknown>).message) || "Submission failed");
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 
 export interface PipelineProposal {
   id: string;
@@ -41,10 +41,13 @@ export async function uploadProposalDocument(proposalId: string, file: File, doc
   return res.json();
 }
 
-export async function triggerAiEvaluation(proposalId: string) {
+export async function triggerAiEvaluation(proposalId: string): Promise<{ success: boolean; meetingId: string }> {
   const res = await fetch(`/api/proposals/${proposalId}/evaluate`, { method: 'POST' });
-  if (!res.ok) throw new Error("Failed to trigger evaluation");
-  return res.json();
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Failed to trigger evaluation");
+  }
+  return res.json() as Promise<{ success: boolean; meetingId: string }>;
 }
 
 

@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { approveProposalWithMilestones } from "../service";
@@ -39,7 +40,7 @@ export function MilestoneModal({ proposalId, onComplete, onCancel }: { proposalI
       await approveProposalWithMilestones(proposalId, parsedMilestones, parsedPlan, overrideReason);
       onComplete();
     } catch (err: unknown) {
-      alert("Failed to approve: " + String((err as Record<string, unknown>).message));
+      toast.error("Failed to approve: " + String((err as Record<string, unknown>).message));
     } finally {
       setLoading(false);
     }
