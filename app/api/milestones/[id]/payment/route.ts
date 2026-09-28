@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await releasePayment(user.id, milestoneId);
     } else {
       if (role !== 'platform_admin') return NextResponse.json({ error: "Only admins can mark payment paid" }, { status: 403 });
-      await markPaymentPaid(user.id, milestoneId);
+      await markPaymentPaid(user.id, milestoneId, "SYS-" + Date.now());
     }
 
     return NextResponse.json({ success: true });
@@ -34,3 +34,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Unknown error") }, { status: (error as { code?: string })?.code === "FORBIDDEN" ? 403 : 500 });
   }
 }
+

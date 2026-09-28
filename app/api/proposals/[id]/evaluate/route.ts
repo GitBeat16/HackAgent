@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Update state to Evaluating
-    await queueAiEvaluation(user.id, (await params).id, meeting.id);
+    await queueAiEvaluation(user.id, (await params).id);
 
     return NextResponse.json({ success: true, meetingId: meeting.id });
   } catch (error: unknown) {
@@ -49,5 +49,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Unknown error") }, { status: (error as { code?: string })?.code === 'FORBIDDEN' ? 403 : 500 });
   }
 }
+
 
 

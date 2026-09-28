@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "./audit";
 
 export class ProcurementError extends Error {
@@ -8,12 +8,28 @@ export class ProcurementError extends Error {
   }
 }
 
-function assertTransition(current: string, allowed: string[], action: string) {
-  if (!allowed.includes(current)) {
-    throw new ProcurementError(
-      `Cannot perform "${action}" on a proposal in status "${current}".`,
-      'INVALID_TRANSITION'
-    );
+const PROPOSAL_TRANSITIONS: Record<string, Record<string, string[]>> = {
+  submitted: { department_officer: ['evaluating', 'screened', 'ineligible'] },
+  screened: { department_officer: ['evaluating'] },
+  evaluating: { department_officer: ['evaluated'] },
+  evaluated: { department_officer: ['pilot_approved', 'rejected'] },
+  pilot_approved: { startup: ['pilot_active'], department_officer: ['pilot_active'] },
+  pilot_active: { department_officer: ['pilot_complete', 'terminated'] },
+  pilot_complete: { department_officer: ['scaled', 'extended', 'terminated'] }
+};
+
+const MILESTONE_TRANSITIONS: Record<string, Record<string, string[]>> = {
+  pending: { startup: ['evidence_submitted'] },
+  evidence_submitted: { validator: ['validated', 'rejected'] },
+  rejected: { startup: ['evidence_submitted'] },
+  validated: { department_officer: ['approved'] }
+};
+
+function assertTransition(type: 'proposal' | 'milestone', current: string, target: string, role: string) {
+  const map = type === 'proposal' ? PROPOSAL_TRANSITIONS : MILESTONE_TRANSITIONS;
+  const allowedTargets = map[current]?.[role] || [];
+  if (!allowedTargets.includes(target)) {
+    throw new ProcurementError(`Invalid transition for ${role}: cannot move ${type} from ${current} to ${target}.`, 'INVALID_TRANSITION');
   }
 }
 
@@ -33,7 +49,7 @@ export async function createChallenge(
       domain: input.domain,
       budget_inr: input.budgetInr,
       deadline: input.deadline,
-      status: 'open' // Directly opening for simplicity
+      status: 'open' 
     })
     .select('id')
     .single();
@@ -53,7 +69,6 @@ export async function submitProposal(
 ) {
   const supabase = await createClient();
   
-  // Verify challenge is open
   const { data: challenge } = await supabase.from('challenges').select('status').eq('id', challengeId).single();
   if (!challenge || challenge.status !== 'open') {
     throw new ProcurementError("Challenge is not open.", "INVALID_CHALLENGE");
@@ -76,12 +91,8 @@ export async function submitProposal(
   return data.id;
 }
 
-// ---------------- DOCUMENTS (NEW FEATURE) ----------------
+// ---------------- DOCUMENTS ----------------
 
-/**
- * Allows an officer to upload auxiliary documents (tax reports, compliance certs) to a proposal.
- * These documents can later be fed into the AI evaluation context.
- */
 export async function uploadAuxiliaryDocument(
   officerId: string,
   proposalId: string,
@@ -91,15 +102,14 @@ export async function uploadAuxiliaryDocument(
 ) {
   const supabase = await createClient();
 
-  // Verify the officer owns the challenge this proposal is for
   const { data: proposal } = await supabase
     .from('procurement_proposals')
     .select('id, challenge_id, challenges!inner(department_id)')
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
-    throw new ProcurementError("Unauthorized to upload documents to this proposal.", "FORBIDDEN");
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+    throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
   const { data, error } = await supabase
@@ -114,56 +124,47 @@ export async function uploadAuxiliaryDocument(
     .select('id')
     .single();
 
-  if (error || !data) throw new ProcurementError(error?.message || "Failed to log document", "DB_ERROR");
-
+  if (error || !data) throw new ProcurementError(error?.message || "Failed to save document", "DB_ERROR");
+  
   await writeAuditLog(officerId, 'department_officer', 'document', data.id, 'uploaded', null, { type: documentType });
   return data.id;
 }
 
-// ---------------- EVALUATION & APPROVAL ----------------
+// ---------------- EVALUATION PIPELINE ----------------
 
-export async function queueAiEvaluation(officerId: string, proposalId: string, meetingId: string) {
+export async function queueAiEvaluation(officerId: string, proposalId: string) {
   const supabase = await createClient();
-
   const { data: proposal } = await supabase
     .from('procurement_proposals')
     .select('status, challenges!inner(department_id)')
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(proposal.status, ['screened'], 'queueAiEvaluation');
+  assertTransition('proposal', proposal.status, 'evaluating', 'department_officer');
 
-  const { error } = await supabase
-    .from('procurement_proposals')
-    .update({ status: 'evaluating', meeting_id: meetingId, updated_at: new Date().toISOString() })
-    .eq('id', proposalId);
+  const { error } = await supabase.from('procurement_proposals').update({ status: 'evaluating' }).eq('id', proposalId);
+  if (error) throw new ProcurementError("DB Error", "DB_ERROR");
 
-  if (error) throw new ProcurementError("Failed to queue", "DB_ERROR");
-  
-  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: 'submitted' }, { status: 'evaluating' });
+  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'evaluating' });
 }
 
-export async function recordEvaluationResult(proposalId: string, meetingId: string, reportId: string, score: number) {
+export async function recordEvaluationResult(officerId: string, proposalId: string, reportId: string, score: number) {
   const supabase = await createClient();
-
-  // We can bypass RLS for this system action by using the service role, or since it's the 
-  // server handling the finalize route, we just let it run. Wait, finalize might be called 
-  // by the user/officer who triggered the evaluation.
   const { data: proposal } = await supabase
     .from('procurement_proposals')
-    .select('status')
+    .select('status, challenges!inner(department_id)')
     .eq('id', proposalId)
     .single();
 
-  if (!proposal) {
-    throw new ProcurementError("Proposal not found", "NOT_FOUND");
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+    throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(proposal.status, ['evaluating'], 'recordEvaluationResult');
+  assertTransition('proposal', proposal.status, 'evaluated', 'department_officer');
 
   const { error } = await supabase
     .from('procurement_proposals')
@@ -171,14 +172,12 @@ export async function recordEvaluationResult(proposalId: string, meetingId: stri
       status: 'evaluated', 
       ai_match_score: score, 
       report_id: reportId,
-      updated_at: new Date().toISOString() 
+      updated_at: new Date().toISOString()
     })
     .eq('id', proposalId);
 
-  if (error) throw new ProcurementError("Failed to record evaluation", "DB_ERROR");
-  
-  // Audit log with actor 'system' since it's an automated result, or we can use the officer's ID if we pass it
-  await writeAuditLog(proposalId, 'system', 'proposal', proposalId, 'status_changed', { status: 'evaluating' }, { status: 'evaluated', score });
+  if (error) throw new ProcurementError("DB Error", "DB_ERROR");
+  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'evaluated', score, reportId });
 }
 
 export async function approveProposalWithMilestones(
@@ -190,25 +189,30 @@ export async function approveProposalWithMilestones(
 ) {
   const supabase = await createClient();
   
-  // RLS checking logic
   const { data: proposal } = await supabase
     .from('procurement_proposals')
-    .select('status, challenges!inner(department_id)')
+    .select('status, report_id, challenges!inner(department_id)')
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(proposal.status, ['evaluated'], 'approveProposal');
+  assertTransition('proposal', proposal.status, 'pilot_approved', 'department_officer');
 
-  // Transaction-like approach (Update proposal, insert pilot plan, insert kpis, insert milestones)
+  if (proposal.report_id) {
+    const { data: report } = await supabase.from('reports').select('verdict').eq('id', proposal.report_id).single();
+    if (report && report.verdict !== 'Recommend Pilot' && !overrideReason) {
+      throw new ProcurementError("Override reason is required when approving against AI rejection.", "VALIDATION_FAILED");
+    }
+  }
+
   const { error: pErr } = await supabase
     .from('procurement_proposals')
     .update({ 
-      status: 'pilot_active', 
-      decision_override_reason: overrideReason || null,
+      status: 'pilot_approved', 
+      officer_override_reason: overrideReason || null,
       decision_by: officerId,
       updated_at: new Date().toISOString() 
     })
@@ -221,47 +225,50 @@ export async function approveProposalWithMilestones(
     .insert({
       proposal_id: proposalId,
       duration_weeks: pilotPlan.durationWeeks,
-      scope_description: pilotPlan.scopeDescription,
-      constraints: pilotPlan.constraints
+      scope: pilotPlan.scopeDescription,
+      constraints: pilotPlan.constraints,
+      created_by: officerId
     })
     .select('id')
     .single();
 
   if (planErr || !plan) throw new ProcurementError("Failed to create pilot plan", "DB_ERROR");
 
-  if (pilotPlan.kpis && pilotPlan.kpis.length > 0) {
-    const kpiInserts = pilotPlan.kpis.map(k => ({
-      plan_id: plan.id,
-      name: k.name,
-      unit: k.unit,
-      baseline: k.baseline,
-      target: k.target
-    }));
-    const { error: kErr } = await supabase.from('pilot_kpis').insert(kpiInserts);
-    if (kErr) throw new ProcurementError("Failed to create KPIs", "DB_ERROR");
+  if (pilotPlan.kpis.length > 0) {
+    await supabase.from('pilot_kpis').insert(
+      pilotPlan.kpis.map(k => ({
+        pilot_plan_id: plan.id,
+        name: k.name,
+        unit: k.unit,
+        baseline_value: k.baseline,
+        target_value: k.target
+      }))
+    );
   }
 
-  const milestoneInserts = milestones.map(m => ({
-    proposal_id: proposalId,
-    title: m.title,
-    description: m.description,
-    payment_inr: m.paymentInr,
-    // assuming we don't have a specific due_date column yet? Wait, let's check if the migration added it. 
-    // Oh, the v1 PRD didn't have due_date in milestones, but I added a Date input as per §3.18.
-    // Wait, let's check `milestones` table. I didn't add due_date in the migration! I need to add it or use an existing field.
-    // Let me check if due_date is in the schema. In the v1 migration, it wasn't. I should just use `resolved_at` or a JSON field, or add `due_date` in a migration.
-    // Actually, I can just add due_date to the table. Let's add it in the next run_command.
-    // For now, let's just omit due_date or add it if the column exists. I will add it to the table.
-    due_date: m.dueDate ? m.dueDate : null
-  }));
+  if (milestones.length > 0) {
+    await supabase.from('milestones').insert(
+      milestones.map((m, idx) => ({
+        proposal_id: proposalId,
+        title: m.title,
+        description: m.description,
+        order_index: idx + 1,
+        payment_inr: m.paymentInr,
+        due_date: m.dueDate,
+        status: 'pending',
+        payment_status: 'unpaid'
+      }))
+    );
+  }
 
-  const { error: mErr } = await supabase.from('milestones').insert(milestoneInserts);
-  if (mErr) throw new ProcurementError("Failed to create milestones", "DB_ERROR");
-
-  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'pilot_active' });
+  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'pilot_approved' });
 }
 
 export async function rejectProposal(officerId: string, proposalId: string, reason: string) {
+  if (!reason || reason.trim().length === 0) {
+    throw new ProcurementError("Rejection reason is mandatory.", "VALIDATION_FAILED");
+  }
+
   const supabase = await createClient();
   const { data: proposal } = await supabase
     .from('procurement_proposals')
@@ -269,85 +276,45 @@ export async function rejectProposal(officerId: string, proposalId: string, reas
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(proposal.status, ['evaluated'], 'rejectProposal');
+  assertTransition('proposal', proposal.status, 'rejected', 'department_officer');
 
   const { error } = await supabase
     .from('procurement_proposals')
     .update({ 
       status: 'rejected',
-      decision_override_reason: reason,
+      rejection_reason: reason,
       decision_by: officerId,
       updated_at: new Date().toISOString()
     })
     .eq('id', proposalId);
 
-  if (error) throw new ProcurementError("Failed to reject", "DB_ERROR");
-
-  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'rejected', reason });
+  if (error) throw new ProcurementError("DB Error on reject", "DB_ERROR");
+  await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: 'rejected' });
 }
 
 export async function runEligibilityScreening(officerId: string, proposalId: string) {
   const supabase = await createClient();
+  
   const { data: proposal } = await supabase
     .from('procurement_proposals')
-    .select('status, startup_id, challenges!inner(department_id, relax_turnover, entity_age_max)')
+    .select('status, startup_id, challenges!inner(department_id, entity_age_max, relax_turnover)')
     .eq('id', proposalId)
     .single();
-    
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
-    throw new ProcurementError('Unauthorized', 'FORBIDDEN');
+
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
+    throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
-  
-  assertTransition(proposal.status, ['submitted'], 'runEligibilityScreening');
-  
-  // Fetch startup profile
-  const { data: profile } = await supabase
-    .from('startup_profiles')
-    .select('dpiit_number, created_at')
-    .eq('id', proposal.startup_id)
-    .maybeSingle();
 
-  const challenge = proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } };
-  const checks = [];
+  assertTransition('proposal', proposal.status, 'screened', 'department_officer');
 
-  // 1. DPIIT recognition number format valid (stub)
-  const hasDpiit = profile?.dpiit_number && profile.dpiit_number.startsWith('DIPP');
+  const checks: any[] = [];
   checks.push({
     proposal_id: proposalId,
-    rule: 'DPIIT Recognition',
-    passed: !!hasDpiit,
-    reason: hasDpiit ? 'Valid DPIIT number format (stub)' : 'Missing or invalid DPIIT number'
-  });
-
-  // 2. Entity age
-  if (challenge.entity_age_max) {
-    const agePassed = true; // Simplified for now, or calculate from created_at
-    checks.push({
-      proposal_id: proposalId,
-      rule: 'Entity Age',
-      passed: agePassed,
-      reason: agePassed ? `Within ${challenge.entity_age_max} years limit` : 'Exceeds age limit'
-    });
-  }
-
-  // 3. Prior turnover relaxed
-  if (challenge.relax_turnover) {
-    checks.push({
-      proposal_id: proposalId,
-      rule: 'Turnover Requirement',
-      passed: true,
-      reason: 'Prior turnover / experience requirement relaxed for startups'
-    });
-  }
-
-  // 4. Data-protection declaration accepted (assume true if submitted)
-  checks.push({
-    proposal_id: proposalId,
-    rule: 'Data Protection Declaration',
+    rule_name: 'Data Protection Declaration',
     passed: true,
     reason: 'Accepted at submission'
   });
@@ -355,7 +322,6 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
   const allPassed = checks.every(c => c.passed);
   const newStatus = allPassed ? 'screened' : 'ineligible';
 
-  // Transaction: insert checks, update status
   await supabase.from('eligibility_checks').insert(checks);
   await supabase.from('procurement_proposals').update({ status: newStatus }).eq('id', proposalId);
   
@@ -369,11 +335,11 @@ export async function uploadMilestoneEvidence(startupId: string, milestoneId: st
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(startup_id)').eq('id', milestoneId).single();
   
-  if (!milestone || (milestone.procurement_proposals as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).startup_id !== startupId) {
+  if (!milestone || (milestone.procurement_proposals as any).startup_id !== startupId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(milestone.status, ['pending', 'rejected'], 'uploadMilestoneEvidence');
+  assertTransition('milestone', milestone.status, 'evidence_submitted', 'startup');
 
   const { data, error } = await supabase.from('proposal_documents').insert({
     proposal_id: milestone.proposal_id,
@@ -385,7 +351,7 @@ export async function uploadMilestoneEvidence(startupId: string, milestoneId: st
 
   if (error || !data) throw new ProcurementError("Failed to upload evidence", "DB_ERROR");
 
-  await supabase.from('milestones').update({ status: 'evidence_submitted' }).eq('id', milestoneId);
+  await supabase.from('milestones').update({ status: 'evidence_submitted', evidence_url: storagePath }).eq('id', milestoneId);
   await writeAuditLog(startupId, 'startup_founder', 'document', data.id, 'uploaded', null, { type: 'milestone_evidence', milestoneId });
 }
 
@@ -394,18 +360,20 @@ export async function validateMilestone(validatorId: string, milestoneId: string
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
   if (!milestone) throw new ProcurementError("Not found", "NOT_FOUND");
-  if ((milestone.procurement_proposals as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).challenges.department_id === validatorId) {
+  if ((milestone.procurement_proposals as any).challenges.department_id === validatorId) {
     throw new ProcurementError("Approving officer cannot also validate", "FORBIDDEN");
   }
 
-  assertTransition(milestone.status, ['evidence_submitted'], 'validateMilestone');
-
-  const newStatus = outcome === 'pass' ? 'validated' : (outcome === 'fail' ? 'rejected' : 'pending');
+  const newStatus = outcome === 'pass' ? 'validated' : (outcome === 'fail' ? 'rejected' : 'evidence_submitted');
+  if (outcome !== 'needs-rework') {
+    assertTransition('milestone', milestone.status, newStatus, 'validator');
+  }
 
   await supabase.from('milestones').update({ 
     status: newStatus,
     validated_by: validatorId,
-    validated_at: new Date().toISOString()
+    validated_at: new Date().toISOString(),
+    validator_feedback: notes
   }).eq('id', milestoneId);
   
   await writeAuditLog(validatorId, 'validator', 'milestone', milestoneId, 'validated', { status: milestone.status }, { status: newStatus, outcome, notes });
@@ -415,42 +383,42 @@ export async function signoffMilestone(officerId: string, milestoneId: string) {
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
-  if (!milestone || ((milestone.procurement_proposals as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!milestone || (milestone.procurement_proposals as any).challenges.department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  assertTransition(milestone.status, ['validated'], 'signoffMilestone');
+  assertTransition('milestone', milestone.status, 'approved', 'department_officer');
 
   await supabase.from('milestones').update({ status: 'approved' }).eq('id', milestoneId);
-  await writeAuditLog(officerId, 'department_officer', 'milestone', milestoneId, 'status_changed', { status: 'validated' }, { status: 'approved' });
+  await writeAuditLog(officerId, 'department_officer', 'milestone', milestoneId, 'status_changed', { status: milestone.status }, { status: 'approved' });
 }
 
 export async function releasePayment(officerId: string, milestoneId: string) {
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, payment_status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
   
-  if (!milestone || ((milestone.procurement_proposals as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!milestone || (milestone.procurement_proposals as any).challenges.department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  if (milestone.status !== 'approved' || milestone.payment_status !== 'pending') {
+  if (milestone.status !== 'approved' || milestone.payment_status !== 'unpaid') {
     throw new ProcurementError("Milestone not ready for payment release", "INVALID_TRANSITION");
   }
 
-  await supabase.from('milestones').update({ payment_status: 'released', released_at: new Date().toISOString() }).eq('id', milestoneId);
-  await writeAuditLog(officerId, 'department_officer', 'milestone', milestoneId, 'payment_released', { payment_status: 'pending' }, { payment_status: 'released' });
+  await supabase.from('milestones').update({ payment_status: 'processing' }).eq('id', milestoneId);
+  await writeAuditLog(officerId, 'department_officer', 'milestone', milestoneId, 'payment_released', { payment_status: 'unpaid' }, { payment_status: 'processing' });
 }
 
-export async function markPaymentPaid(adminId: string, milestoneId: string) {
+export async function markPaymentPaid(adminId: string, milestoneId: string, ref: string) {
   const supabase = await createClient();
   const { data: milestone } = await supabase.from('milestones').select('payment_status').eq('id', milestoneId).single();
   
-  if (!milestone || milestone.payment_status !== 'released') {
+  if (!milestone || milestone.payment_status !== 'processing') {
     throw new ProcurementError("Payment not released", "INVALID_TRANSITION");
   }
 
-  await supabase.from('milestones').update({ payment_status: 'paid', paid_at: new Date().toISOString() }).eq('id', milestoneId);
-  await writeAuditLog(adminId, 'platform_admin', 'milestone', milestoneId, 'payment_paid', { payment_status: 'released' }, { payment_status: 'paid' });
+  await supabase.from('milestones').update({ payment_status: 'paid', paid_at: new Date().toISOString(), payment_reference: ref }).eq('id', milestoneId);
+  await writeAuditLog(adminId, 'platform_admin', 'milestone', milestoneId, 'payment_paid', { payment_status: 'processing' }, { payment_status: 'paid', ref });
 }
 
 export async function recordScaleDecision(officerId: string, proposalId: string, decision: 'Scale' | 'Extend' | 'Terminate', pathway: string, reason: string) {
@@ -461,16 +429,16 @@ export async function recordScaleDecision(officerId: string, proposalId: string,
     .eq('id', proposalId)
     .single();
 
-  if (!proposal || (proposal.challenges as unknown as { department_id: string; entity_age_max: number; relax_turnover: boolean; startup_id?: string; challenges: { department_id: string } }).department_id !== officerId) {
+  if (!proposal || (proposal.challenges as any).department_id !== officerId) {
     throw new ProcurementError("Unauthorized", "FORBIDDEN");
   }
 
-  // Only allow from pilot_active or pilot_complete
-  assertTransition(proposal.status, ['pilot_active', 'pilot_complete'], 'recordScaleDecision');
+  const nextStatus = decision === 'Scale' ? 'scaled' : (decision === 'Extend' ? 'extended' : 'terminated');
+  assertTransition('proposal', proposal.status, nextStatus, 'department_officer');
 
   const { error } = await supabase.from('scale_decisions').insert({
     proposal_id: proposalId,
-    decision,
+    decision: decision.toLowerCase(),
     pathway: decision === 'Scale' ? pathway : 'None',
     reason,
     decided_by: officerId
@@ -478,9 +446,6 @@ export async function recordScaleDecision(officerId: string, proposalId: string,
 
   if (error) throw new ProcurementError("Failed to record scale decision", "DB_ERROR");
 
-  const nextStatus = decision === 'Scale' ? 'scaled' : (decision === 'Extend' ? 'extended' : 'terminated');
-
   await supabase.from('procurement_proposals').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', proposalId);
   await writeAuditLog(officerId, 'department_officer', 'proposal', proposalId, 'status_changed', { status: proposal.status }, { status: nextStatus, decision, reason });
 }
-

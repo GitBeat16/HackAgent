@@ -1,19 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getErrorMessage } from "@/lib/server/errors";
 import { notificationOptions } from "../types";
+import { getProfile, updateProfile } from "../actions";
 
 export function SettingsTabs() {
   const [displayName, setDisplayName] = useState("");
-  const [title, setTitle] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [role, setRole] = useState("");
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getProfile().then(data => {
+      setDisplayName(data.displayName || "");
+      setRole(data.role || "");
+      if (data.role === 'department_officer') {
+        setOrgName(data.departmentName || "");
+      } else if (data.role === 'startup') {
+        setOrgName(data.startupName || "");
+      }
+      setLoading(false);
+    }).catch(err => {
+      setSaveError(getErrorMessage(err));
+      setLoading(false);
+    });
+  }, []);
 
   function togglePref(id: string, checked: boolean) {
     setPrefs((prev) => ({ ...prev, [id]: checked }));
@@ -23,13 +42,18 @@ export function SettingsTabs() {
     setSaving(true);
     setSaveError(null);
     try {
-      await new Promise(r => setTimeout(r, 500));
+      const payload: any = { displayName };
+      if (role === 'department_officer') payload.departmentName = orgName;
+      if (role === 'startup') payload.startupName = orgName;
+      await updateProfile(payload);
     } catch (err) {
       setSaveError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
   }
+
+  if (loading) return <div>Loading profile...</div>;
 
   return (
     <div className="w-full max-w-2xl space-y-8">
@@ -43,10 +67,12 @@ export function SettingsTabs() {
             <Label htmlFor="displayName">Name</Label>
             <Input id="displayName" value={displayName} onChange={e => setDisplayName(e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="title">Job Title</Label>
-            <Input id="title" value={title} onChange={e => setTitle(e.target.value)} />
-          </div>
+          {(role === 'department_officer' || role === 'startup') && (
+            <div className="space-y-1.5">
+              <Label htmlFor="orgName">{role === 'department_officer' ? 'Department Name' : 'Startup Name'}</Label>
+              <Input id="orgName" value={orgName} onChange={e => setOrgName(e.target.value)} />
+            </div>
+          )}
         </CardContent>
         <CardFooter>
           <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
