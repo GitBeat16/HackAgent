@@ -1,5 +1,5 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = { typescript: { ignoreBuildErrors: true },
+﻿/** @type {import('next').NextConfig} */
+const nextConfig = { 
   reactStrictMode: true,
   // Keep Turbopack inside this repository when other lockfiles exist higher
   // in a developer's home directory.
@@ -13,3 +13,4 @@ const nextConfig = { typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;
+

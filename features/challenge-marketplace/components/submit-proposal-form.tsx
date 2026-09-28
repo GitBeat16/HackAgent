@@ -48,7 +48,7 @@ export function SubmitProposalForm({ challengeId, submitAction }: { challengeId:
         <Label>Solution Type</Label>
         <Select 
           value={solutionType} 
-          onChange={(e) => setSolutionType(e.target.value as string)}
+          onChange={(e) => setSolutionType(e.target.value as "App Generation" | "Service Proposal")}
           options={[
             { label: "Software / App Generation", value: "App Generation" },
             { label: "Hardware / Service Proposal", value: "Service Proposal" }
