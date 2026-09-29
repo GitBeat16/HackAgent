@@ -15,23 +15,29 @@ export default async function AdminImpactPage() {
     { count: challengesCount },
     { count: proposalsCount },
     { count: pilotsCount },
-    { data: proposals }
+    { data: proposals },
+    { data: paidMilestones }
   ] = await Promise.all([
     supabase.from("challenges").select("*", { count: "exact", head: true }),
     supabase.from("procurement_proposals").select("*", { count: "exact", head: true }),
     supabase.from("procurement_proposals").select("*", { count: "exact", head: true }).in("status", ["pilot_active", "scaled", "completed"]),
-    supabase.from("procurement_proposals").select("ai_match_score").not("ai_match_score", "is", null)
+    supabase.from("procurement_proposals").select("ai_match_score").not("ai_match_score", "is", null),
+    supabase.from("milestones").select("is_on_time").eq("payment_status", "paid")
   ]);
 
   const avgScore = proposals && proposals.length > 0
     ? (proposals.reduce((acc, p) => acc + (p.ai_match_score || 0), 0) / proposals.length).toFixed(1)
     : "N/A";
 
+  const totalPaid = paidMilestones?.length || 0;
+  const onTimePaid = paidMilestones?.filter(m => m.is_on_time === true).length || 0;
+  const onTimePercentage = totalPaid > 0 ? ((onTimePaid / totalPaid) * 100).toFixed(1) + "%" : "N/A";
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto py-8">
       <SectionHeader title="Platform Impact Dashboard" description="Aggregate metrics across all government departments." />
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Challenges</CardTitle>
@@ -69,6 +75,16 @@ export default async function AdminImpactPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{avgScore}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">On-Time Payments</CardTitle>
+            <CheckCircle className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{onTimePercentage}</div>
           </CardContent>
         </Card>
       </div>

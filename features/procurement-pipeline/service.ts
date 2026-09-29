@@ -9,7 +9,7 @@ export interface PipelineProposal {
   profiles: {
     startup_name: string;
   };
-  milestones?: { id: string, title: string, description: string, status: string, payment_status: string, payment_inr: number }[];
+  milestones?: { id: string, title: string, description: string, status: string, payment_status: string, payment_inr: number, is_on_time?: boolean, days_to_payment?: number }[];
   eligibility_checks?: { rule_name: string, passed: boolean, reason: string }[];
 }
 

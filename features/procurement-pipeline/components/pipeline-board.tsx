@@ -228,6 +228,8 @@ export function PipelineBoard({ challengeId }: { challengeId: string }) {
                           status: string;
                           payment_status: string;
                           payment_inr: number;
+                          is_on_time?: boolean;
+                          days_to_payment?: number;
                         }) => (
                           <div key={m.id} className="text-xs border p-2 rounded bg-surface space-y-2">
                             <div className="flex justify-between font-medium">
@@ -263,7 +265,14 @@ export function PipelineBoard({ challengeId }: { challengeId: string }) {
                               <div className="text-amber-500 font-medium">Payment Processing</div>
                             )}
                             {m.payment_status === "paid" && (
-                              <div className="text-emerald-600 font-medium">Paid ✓</div>
+                              <div className="flex flex-col">
+                                <div className="text-emerald-600 font-medium">Paid ✓</div>
+                                {m.is_on_time !== undefined && m.is_on_time !== null && (
+                                  <div className={`text-[10px] font-bold ${m.is_on_time ? 'text-emerald-500' : 'text-destructive'}`}>
+                                    {m.is_on_time ? `ON-TIME (${m.days_to_payment} days)` : `LATE (${m.days_to_payment} days)`}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         ))}

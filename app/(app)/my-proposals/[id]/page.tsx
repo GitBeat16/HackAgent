@@ -1,4 +1,4 @@
-﻿import { requireUser } from "@/lib/server/auth";
+import { requireUser } from "@/lib/server/auth";
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -67,7 +67,7 @@ export default async function ProposalTrackerPage({ params }: { params: Promise<
           <CardTitle>Milestones & Payments</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {milestones?.map((m: { id: string, title: string, description: string, status: string, payment_status: string, payment_inr: number }, idx: number) => (
+          {milestones?.map((m: { id: string, title: string, description: string, status: string, payment_status: string, payment_inr: number, is_on_time?: boolean, days_to_payment?: number }, idx: number) => (
             <div key={m.id} className="border p-4 rounded-lg space-y-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -81,6 +81,11 @@ export default async function ProposalTrackerPage({ params }: { params: Promise<
                     {m.payment_inr.toLocaleString('en-IN')}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">Payment: {m.payment_status}</div>
+                  {m.is_on_time !== undefined && m.is_on_time !== null && m.payment_status === 'paid' && (
+                    <div className={`text-[10px] font-bold mt-1 ${m.is_on_time ? 'text-emerald-500' : 'text-destructive'}`}>
+                      {m.is_on_time ? `ON-TIME (${m.days_to_payment} days)` : `LATE (${m.days_to_payment} days)`}
+                    </div>
+                  )}
                 </div>
               </div>
               

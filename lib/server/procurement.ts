@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "./audit";
+import { PAYMENT_SLA_DAYS } from "./constants";
 
 export class ProcurementError extends Error {
   constructor(message: string, public code: string) {
@@ -496,7 +497,10 @@ export async function signoffMilestone(officerId: string, milestoneId: string) {
 
   assertTransition('milestone', milestone.status, 'approved', 'department_officer');
 
-  await supabase.from('milestones').update({ status: 'approved' }).eq('id', milestoneId);
+  await supabase.from('milestones').update({ 
+    status: 'approved',
+    approved_at: new Date().toISOString()
+  }).eq('id', milestoneId);
   await writeAuditLog(officerId, 'department_officer', 'milestone', milestoneId, 'status_changed', { status: milestone.status }, { status: 'approved' });
 }
 
@@ -518,14 +522,31 @@ export async function releasePayment(officerId: string, milestoneId: string) {
 
 export async function markPaymentPaid(adminId: string, milestoneId: string, ref: string) {
   const supabase = await createClient();
-  const { data: milestone } = await supabase.from('milestones').select('payment_status').eq('id', milestoneId).single();
+  const { data: milestone } = await supabase.from('milestones').select('payment_status, approved_at').eq('id', milestoneId).single();
   
   if (!milestone || milestone.payment_status !== 'processing') {
     throw new ProcurementError("Payment not released", "INVALID_TRANSITION");
   }
 
-  await supabase.from('milestones').update({ payment_status: 'paid', paid_at: new Date().toISOString(), payment_reference: ref }).eq('id', milestoneId);
-  await writeAuditLog(adminId, 'platform_admin', 'milestone', milestoneId, 'payment_paid', { payment_status: 'processing' }, { payment_status: 'paid', ref });
+  const paidDate = new Date();
+  let daysToPayment = null;
+  let isOnTime = null;
+
+  if (milestone.approved_at) {
+    const approvedDate = new Date(milestone.approved_at);
+    daysToPayment = Math.max(0, Math.floor((paidDate.getTime() - approvedDate.getTime()) / (1000 * 60 * 60 * 24)));
+    isOnTime = daysToPayment <= PAYMENT_SLA_DAYS;
+  }
+
+  await supabase.from('milestones').update({ 
+    payment_status: 'paid', 
+    paid_at: paidDate.toISOString(), 
+    payment_reference: ref,
+    days_to_payment: daysToPayment,
+    is_on_time: isOnTime
+  }).eq('id', milestoneId);
+  
+  await writeAuditLog(adminId, 'platform_admin', 'milestone', milestoneId, 'payment_paid', { payment_status: 'processing' }, { payment_status: 'paid', ref, daysToPayment, isOnTime });
 }
 
 export async function recordScaleDecision(officerId: string, proposalId: string, decision: 'Scale' | 'Extend' | 'Terminate', pathway: string, reason: string) {
