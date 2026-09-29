@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 
-export function SubmitProposalForm({ challengeId, submitAction }: { challengeId: string, submitAction: (text: string) => Promise<void> }) {
+export function SubmitProposalForm({ challengeId, submitAction }: { challengeId: string, submitAction: (payload: any) => Promise<void> }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -23,18 +23,8 @@ export function SubmitProposalForm({ challengeId, submitAction }: { challengeId:
     e.preventDefault();
     setLoading(true);
 
-    const compiledText = `[Solution Type]: ${solutionType}\n\n[Architecture & Approach]:\n${architecture}\n\n[Implementation Timeline]:\n${timeline}\n\n[Estimated Cost]: ₹${cost}\n\n[Past Experience]:\n${pastExperience}`;
-
     try {
-      if (compiledText.length < 200) {
-        throw new Error("Proposal must be at least 200 characters overall.");
-      }
-      
-      // Simple prompt injection sanitization
-      let sanitized = compiledText.replace(/<\/system>/gi, '').replace(/\[INST\]/gi, '').replace(/<\|im_start\|>/gi, '');
-      if (sanitized.length > 5000) sanitized = sanitized.substring(0, 5000);
-
-      await submitAction(sanitized);
+      await submitAction({ solutionType, architecture, timeline, cost, pastExperience });
       router.refresh();
     } catch (err: unknown) {
       toast.error(String((err as Record<string, unknown>).message) || "Submission failed");

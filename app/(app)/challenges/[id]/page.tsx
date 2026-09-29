@@ -1,3 +1,4 @@
+import { proposalSchema, sanitiseForPrompt } from "@/lib/server/validation";
 
 import { requireUser } from "@/lib/server/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -137,11 +138,28 @@ export default async function ChallengeDetailPage({ params }: { params: { id: st
             <Card>
               <CardContent className="pt-6">
                 <h3 className="text-xl font-semibold mb-4">Submit your Proposal</h3>
-                <SubmitProposalForm challengeId={params.id} submitAction={async (text: string) => {
+
+
+
+                <SubmitProposalForm challengeId={params.id} submitAction={async (payload: any) => {
                   "use server";
                   const { user: actionUser } = await requireUser();
-                  if (!actionUser) return;
-                  await submitProposal(actionUser.id, params.id, text);
+                  if (!actionUser) throw new Error("Unauthorized");
+                  
+                  const parsed = proposalSchema.safeParse(payload);
+                  if (!parsed.success) {
+                    throw new Error("Invalid proposal format: " + parsed.error.issues[0]?.message);
+                  }
+                  
+                  const data = parsed.data;
+                  const compiledText = `[Solution Type]: ${data.solutionType}\n\n[Architecture & Approach]:\n${data.architecture}\n\n[Implementation Timeline]:\n${data.timeline}\n\n[Estimated Cost]: ₹${data.cost}\n\n[Past Experience]:\n${data.pastExperience}`;
+                  
+                  const sanitized = sanitiseForPrompt(compiledText);
+                  if (sanitized.length < 200) {
+                    throw new Error("Proposal is too short.");
+                  }
+
+                  await submitProposal(actionUser.id, params.id, sanitized);
                   revalidatePath(`/challenges/${params.id}`);
                 }} />
               </CardContent>
