@@ -18,13 +18,18 @@ export function SubmitProposalForm({ challengeId, submitAction }: { challengeId:
   const [timeline, setTimeline] = useState("");
   const [cost, setCost] = useState("");
   const [pastExperience, setPastExperience] = useState("");
+  const [dataProtectionAccepted, setDataProtectionAccepted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!dataProtectionAccepted) {
+      toast.error("You must accept the data protection declaration.");
+      return;
+    }
     setLoading(true);
 
     try {
-      await submitAction({ solutionType, architecture, timeline, cost, pastExperience });
+      await submitAction({ solutionType, architecture, timeline, cost, pastExperience, dataProtectionAccepted });
       router.refresh();
     } catch (err: unknown) {
       toast.error(String((err as Record<string, unknown>).message) || "Submission failed");
@@ -65,6 +70,19 @@ export function SubmitProposalForm({ challengeId, submitAction }: { challengeId:
       <div className="space-y-2">
         <Label>Relevant Past Experience</Label>
         <Textarea required value={pastExperience} onChange={e => setPastExperience(e.target.value)} placeholder="Links to similar projects, GitHub repos, or previous government pilots..." rows={3} />
+      </div>
+
+      <div className="flex items-center space-x-2 border p-4 rounded bg-surface">
+        <input 
+          type="checkbox" 
+          id="dataProtection" 
+          checked={dataProtectionAccepted}
+          onChange={e => setDataProtectionAccepted(e.target.checked)}
+          className="w-4 h-4"
+        />
+        <Label htmlFor="dataProtection" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          I declare that this proposal complies with the Digital Personal Data Protection Act, 2023.
+        </Label>
       </div>
 
       <Button type="submit" className="w-full" disabled={loading}>

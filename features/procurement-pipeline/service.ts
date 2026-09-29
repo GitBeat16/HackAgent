@@ -10,13 +10,14 @@ export interface PipelineProposal {
     startup_name: string;
   };
   milestones?: { id: string, title: string, description: string, status: string, payment_status: string, payment_inr: number }[];
+  eligibility_checks?: { rule_name: string, passed: boolean, reason: string }[];
 }
 
 export async function fetchPipelineForChallenge(challengeId: string): Promise<PipelineProposal[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('procurement_proposals')
-    .select('id, startup_id, status, ai_match_score, submitted_at, profiles(startup_name), milestones(*)')
+    .select('id, startup_id, status, ai_match_score, submitted_at, profiles(startup_name), milestones(*), eligibility_checks(rule_name, passed, reason)')
     .eq('challenge_id', challengeId);
     
   if (error) {

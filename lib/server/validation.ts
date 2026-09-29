@@ -6,6 +6,9 @@ export const proposalSchema = z.object({
   timeline: z.string().min(1).max(100),
   cost: z.string().min(1).max(50),
   pastExperience: z.string().min(10).max(5000),
+  dataProtectionAccepted: z.boolean().refine(val => val === true, {
+    message: "You must accept the data protection declaration."
+  }),
 });
 
 export function sanitiseForPrompt(input: string): string {

@@ -165,6 +165,23 @@ export function PipelineBoard({ challengeId }: { challengeId: string }) {
                       </p>
                     )}
 
+                    {proposal.eligibility_checks && proposal.eligibility_checks.length > 0 && (
+                      <div className="space-y-1 text-xs border rounded p-2 bg-muted/20">
+                        <div className="font-semibold mb-1">Eligibility Checklist</div>
+                        {proposal.eligibility_checks.map((chk, i) => (
+                          <div key={i} className="flex flex-col gap-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-[10px] uppercase text-muted-foreground">{chk.rule_name}</span>
+                              <span className={chk.passed ? "text-emerald-500 font-bold" : "text-destructive font-bold"}>
+                                {chk.passed ? "PASS" : "FAIL"}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground">{chk.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Actions */}
                     {status === "submitted" && (
                       <Button

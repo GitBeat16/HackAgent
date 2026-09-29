@@ -329,7 +329,13 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
   
   const { data: proposal } = await supabase
     .from('procurement_proposals')
-    .select('status, startup_id, challenges!inner(department_id, entity_age_max, relax_turnover)')
+    .select(`
+      status, 
+      startup_id,
+      data_protection_accepted,
+      challenges!inner(department_id, entity_age_max, relax_turnover),
+      proposal_documents(id)
+    `)
     .eq('id', proposalId)
     .single();
 
@@ -339,17 +345,80 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
 
   assertTransition('proposal', proposal.status, 'screened', 'department_officer');
 
+  const { data: profile } = await supabase
+    .from('startup_profiles')
+    .select('dpiit_number, incorporation_date, meets_turnover_threshold')
+    .eq('user_id', proposal.startup_id)
+    .single();
+
   const checks: Array<{proposal_id: string; rule_name: string; passed: boolean; reason: string}> = [];
+  
+  // Rule 1: DPIIT format (Format check only, not a live registry lookup)
+  const dpiitFormat = /^DIPP\d{1,6}$/i;
+  const dpiitValid = !!profile?.dpiit_number && dpiitFormat.test(profile.dpiit_number);
+  checks.push({
+    proposal_id: proposalId,
+    rule_name: 'DPIIT Recognition Format',
+    passed: dpiitValid,
+    reason: dpiitValid ? 'Valid DIPP format' : 'Invalid or missing DPIIT number'
+  });
+
+  // Rule 2: Entity Age
+  const challengeAgeMax = (proposal.challenges as any).entity_age_max || 10;
+  const relaxTurnover = (proposal.challenges as any).relax_turnover;
+  let ageValid = false;
+  let ageReason = 'Missing incorporation date';
+  if (relaxTurnover) {
+    ageValid = true;
+    ageReason = 'Waived (Relaxation active)';
+  } else if (profile?.incorporation_date) {
+    const incDate = new Date(profile.incorporation_date);
+    const ageYears = (new Date().getTime() - incDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+    if (ageYears <= challengeAgeMax) {
+      ageValid = true;
+      ageReason = `Within ${challengeAgeMax} years limit (${Math.floor(ageYears)} yrs)`;
+    } else {
+      ageReason = `Exceeds ${challengeAgeMax} years limit (${Math.floor(ageYears)} yrs)`;
+    }
+  }
+  checks.push({
+    proposal_id: proposalId,
+    rule_name: 'Entity Age',
+    passed: ageValid,
+    reason: ageReason
+  });
+
+  // Rule 3: Turnover / Experience threshold
+  const turnoverValid = relaxTurnover || !!profile?.meets_turnover_threshold;
+  checks.push({
+    proposal_id: proposalId,
+    rule_name: 'Turnover / Experience',
+    passed: turnoverValid,
+    reason: relaxTurnover ? 'Waived for startups' : (turnoverValid ? 'Meets threshold' : 'Does not meet standard threshold')
+  });
+
+  // Rule 4: Required documents
+  const hasDocs = Array.isArray(proposal.proposal_documents) && proposal.proposal_documents.length > 0;
+  checks.push({
+    proposal_id: proposalId,
+    rule_name: 'Required Documents',
+    passed: hasDocs,
+    reason: hasDocs ? `${proposal.proposal_documents.length} document(s) uploaded` : 'No documents uploaded'
+  });
+
+  // Rule 5: Data Protection Declaration
+  const dpAccepted = !!proposal.data_protection_accepted;
   checks.push({
     proposal_id: proposalId,
     rule_name: 'Data Protection Declaration',
-    passed: true,
-    reason: 'Accepted at submission'
+    passed: dpAccepted,
+    reason: dpAccepted ? 'Accepted at submission' : 'Not accepted'
   });
 
   const allPassed = checks.every(c => c.passed);
   const newStatus = allPassed ? 'screened' : 'ineligible';
 
+  // Write all checks to DB
   await supabase.from('eligibility_checks').insert(checks);
   await supabase.from('procurement_proposals').update({ status: newStatus }).eq('id', proposalId);
   
