@@ -8,6 +8,7 @@ export class ProcurementError extends Error {
   }
 }
 
+// department_id stores the creating officer's user ID (auth.users.id), not a separate department entity — there is no departments table.
 function getChallengeDeptId(challenges: unknown): string | undefined {
   if (Array.isArray(challenges)) return challenges[0]?.department_id;
   return (challenges as { department_id?: string })?.department_id;
