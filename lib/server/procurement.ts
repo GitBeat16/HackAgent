@@ -285,14 +285,10 @@ export async function approveProposalWithMilestones(
 }
 
 export async function rejectProposal(officerId: string, proposalId: string, reason: string) {
-  if (!reason || reason.trim().length === 0) {
-    throw new ProcurementError("Rejection reason is mandatory.", "VALIDATION_FAILED");
-  }
-
   const supabase = await createClient();
   const { data: proposal } = await supabase
     .from('procurement_proposals')
-    .select('status, challenges!inner(department_id)')
+    .select('status, report_id, challenges!inner(department_id)')
     .eq('id', proposalId)
     .single();
 
@@ -302,11 +298,22 @@ export async function rejectProposal(officerId: string, proposalId: string, reas
 
   assertTransition('proposal', proposal.status, 'rejected', 'department_officer');
 
+  if (proposal.report_id) {
+    const { data: report } = await supabase.from('reports').select('verdict').eq('id', proposal.report_id).single();
+    if (report && report.verdict === 'Recommend Pilot' && (!reason || reason.trim().length === 0)) {
+      throw new ProcurementError("Override reason is mandatory when rejecting a proposal that the AI Panel recommended.", "VALIDATION_FAILED");
+    }
+    // If AI rejected or conditional, and officer rejects, they agree, so reason is optional.
+  } else if (!reason || reason.trim().length === 0) {
+    throw new ProcurementError("Rejection reason is mandatory.", "VALIDATION_FAILED");
+  }
+
   const { error } = await supabase
     .from('procurement_proposals')
     .update({ 
       status: 'rejected',
-      rejection_reason: reason,
+      rejection_reason: reason || null,
+      officer_override_reason: reason || null,
       decision_by: officerId,
       updated_at: new Date().toISOString()
     })
