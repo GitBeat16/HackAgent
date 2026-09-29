@@ -14,6 +14,12 @@ function getChallengeDeptId(challenges: unknown): string | undefined {
   return (challenges as { department_id?: string })?.department_id;
 }
 
+function getChallengeConfig(challenges: unknown): { entity_age_max?: number, relax_turnover?: boolean } {
+  const challenge = Array.isArray(challenges) ? challenges[0] : challenges;
+  const casted = challenge as { entity_age_max?: number, relax_turnover?: boolean };
+  return { entity_age_max: casted?.entity_age_max, relax_turnover: casted?.relax_turnover };
+}
+
 function getProposalStartupId(proposals: unknown): string | undefined {
   if (Array.isArray(proposals)) return proposals[0]?.startup_id;
   return (proposals as { startup_id?: string })?.startup_id;
@@ -353,7 +359,8 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
 
   const checks: Array<{proposal_id: string; rule_name: string; passed: boolean; reason: string}> = [];
   
-  // Rule 1: DPIIT format (Format check only, not a live registry lookup)
+  // Rule 1: DPIIT format
+  // DPIIT number format is UNVERIFIED — based on common convention, not confirmed against official documentation. Confirm actual format before relying on this in a real deployment.
   const dpiitFormat = /^DIPP\d{1,6}$/i;
   const dpiitValid = !!profile?.dpiit_number && dpiitFormat.test(profile.dpiit_number);
   checks.push({
@@ -364,8 +371,9 @@ export async function runEligibilityScreening(officerId: string, proposalId: str
   });
 
   // Rule 2: Entity Age
-  const challengeAgeMax = (proposal.challenges as any).entity_age_max || 10;
-  const relaxTurnover = (proposal.challenges as any).relax_turnover;
+  const config = getChallengeConfig(proposal.challenges);
+  const challengeAgeMax = config.entity_age_max || 10;
+  const relaxTurnover = config.relax_turnover;
   let ageValid = false;
   let ageReason = 'Missing incorporation date';
   if (relaxTurnover) {
