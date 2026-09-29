@@ -1,8 +1,6 @@
 ﻿import { createClient } from "@/lib/supabase/server";
-
 import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage } from "@/types/api";
-import type { BoardVote } from "@/types/report";
-import type { ExecutiveVoteDetail } from "@/types/report";
+import type { BoardVote, ExecutiveVoteDetail } from "@/types/report";
 
 type MeetingRow = {
   id: string;
@@ -10,18 +8,25 @@ type MeetingRow = {
   one_liner: string;
   industry: string;
   stage: string;
-  status: MeetingResponse["status"];
-  created_at: string;
+  status: "scheduled" | "in-progress" | "completed";
   pitch: string;
-  meeting_executives: { executive_id: string; seat_index: number }[];
-  messages: MessageRow[];
-  votes: VoteRow[];
-  reports: { id: string }[] | { id: string } | null;
+  created_at: string;
+  meeting_executives: Array<{ executive_id: string; seat_index: number }> | null;
+  messages: Array<{
+    id: string;
+    speaker_id: string;
+    speaker_name: string;
+    role: string;
+    message: string;
+    created_at: string;
+    verification?: any;
+  }> | null;
+  votes: Array<{ executive_id: string; vote: BoardVote }> | null;
+  reports: { id: string } | Array<{ id: string }> | null;
 };
-type MessageRow = { id: string; speaker_id: string; speaker_name: string; role: string; message: string; created_at: string; verification: MeetingTranscriptMessage["verification"] | null };
+
 type VoteRow = { executive_id: string; vote: BoardVote };
 
-/** Everything a live boardroom session needs to render itself. */
 export interface MeetingDetail extends MeetingResponse {
   pitch: string;
   oneLiner: string;
@@ -30,42 +35,7 @@ export interface MeetingDetail extends MeetingResponse {
   executiveIds: string[];
 }
 
-/**
- * Columns every deployment is guaranteed to have.
- *
- * `verification` is deliberately excluded: it arrives with a later migration,
- * and selecting a column that does not exist makes PostgREST reject the whole
- * query. That took the entire boardroom down with a 500 on a database that
- * was merely one migration behind — an optional fact-check field must not be
- * able to do that.
- */
-const BASE_MEETING_SELECT =
-  "id, startup_name, one_liner, industry, stage, status, pitch, created_at, meeting_executives(executive_id, seat_index), messages(id, speaker_id, speaker_name, role, message, created_at), votes(executive_id, vote), reports(id)";
-
-const MEETING_SELECT = BASE_MEETING_SELECT.replace(
-  "message, created_at)",
-  "message, created_at, verification)",
-);
-
-/**
- * Runs a meetings query with the fact-check column, retrying without it when
- * the database has not been migrated yet.
- *
- * The retry costs one extra round-trip exactly once per stale deployment and
- * buys a working boardroom instead of an error screen. `build` is a callback
- * rather than a query object because a Supabase query builder is single-use.
- */
-async function selectMeetings<T>(
-  build: (select: string) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>,
-): Promise<T | null> {
-  const full = await build(MEETING_SELECT);
-  if (!full.error) return full.data;
-  
-
-  const fallback = await build(BASE_MEETING_SELECT);
-  if (fallback.error) throw new Error(fallback.error.message ?? "Could not load meeting.");
-  return fallback.data;
-}
+const MEETING_SELECT = "id, startup_name, one_liner, industry, stage, status, pitch, created_at, meeting_executives(executive_id, seat_index), messages(id, speaker_id, speaker_name, role, message, created_at, verification), votes(executive_id, vote), reports(id)";
 
 function firstReportId(reports: MeetingRow["reports"]) {
   if (!reports) return undefined;
@@ -82,13 +52,8 @@ function toDetail(meeting: MeetingRow): MeetingDetail {
     pitch: meeting.pitch,
     status: meeting.status,
     transcript: (meeting.messages ?? [])
-      // Postgres does not guarantee row order without an ORDER BY on the
-      // embedded table, and messages created in the same millisecond can
-      // tie — id is the stable tiebreak.
       .slice()
-      .sort((a, b) =>
-        a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at),
-      )
+      .sort((a, b) => a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at))
       .map((message) => ({
         id: message.id,
         speakerId: message.speaker_id,
@@ -96,8 +61,6 @@ function toDetail(meeting: MeetingRow): MeetingDetail {
         role: message.role,
         message: message.message,
         createdAt: message.created_at,
-        // Only set when the turn was actually checked — an absent key and a
-        // clean result mean different things to the transcript badge.
         ...(message.verification ? { verification: message.verification } : {}),
       })),
     votes: meeting.votes?.length
@@ -127,100 +90,60 @@ export async function createMeeting(userId: string, input: CreatePitchRequest): 
 
 export async function getMeeting(id: string): Promise<MeetingDetail | null> {
   const supabase = await createClient();
-  const data = await selectMeetings((select) =>
-    supabase.from("meetings").select(select).eq("id", id).maybeSingle(),
-  );
+  const { data, error } = await supabase.from("meetings").select(MEETING_SELECT).eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
   if (!data) return null;
   return toDetail(data as unknown as MeetingRow);
 }
 
-/**
- * The session the boardroom falls back to when it is opened without a
- * `?meeting=` id — an in-progress one if there is one, else the newest.
- */
 export async function getLatestMeeting(userId: string): Promise<MeetingDetail | null> {
   const supabase = await createClient();
-  const data = await selectMeetings((select) =>
-    supabase
-      .from("meetings")
-      .select(select)
-      .eq("user_id", userId)
-      // 'in-progress' sorts before 'scheduled' and 'completed' alphabetically,
-      // so an unfinished session wins over a newer finished one.
-      .order("status", { ascending: true })
-      .order("created_at", { ascending: false })
-      .limit(1),
-  );
-  if (!Array.isArray(data) || data.length === 0) return null;
+  const { data, error } = await supabase
+    .from("meetings")
+    .select(MEETING_SELECT)
+    .eq("user_id", userId)
+    .order("status", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) return null;
   return toDetail(data[0] as unknown as MeetingRow);
 }
 
 export async function appendTranscriptMessage(meetingId: string, message: MeetingTranscriptMessage) {
   const supabase = await createClient();
-  const base = {
-    id: message.id,
-    meeting_id: meetingId,
-    speaker_id: message.speakerId,
-    speaker_name: message.speakerName,
-    role: message.role,
-    message: message.message,
-    created_at: message.createdAt,
-  };
-
   const { error } = await supabase
     .from("messages")
-    .insert({ ...base, verification: message.verification ?? null });
-  if (!error) return;
-
-  // Same reasoning as `selectMeetings`: on a database that has not taken the
-  // fact-check migration, losing the verification field is acceptable —
-  // losing the executive's turn is not.
-  
-  const retry = await supabase.from("messages").insert(base);
-  if (retry.error) throw new Error(retry.error.message);
+    .insert({
+      id: message.id,
+      meeting_id: meetingId,
+      speaker_id: message.speakerId,
+      speaker_name: message.speakerName,
+      role: message.role,
+      message: message.message,
+      created_at: message.createdAt,
+      verification: message.verification ?? null 
+    });
+  if (error) throw new Error(error.message);
 }
 
-/**
- * Records how each executive voted.
- *
- * The rationale and the per-seat detail arrive with the bootstrap migration,
- * so — as with `verification` above — they are dropped rather than allowed to
- * fail a session that has already finished. The vote itself is what the
- * dashboard counts and what `/reports` shows a split from, and it is in every
- * schema this app has shipped.
- */
 export async function recordVotes(meetingId: string, votes: ExecutiveVoteDetail[]) {
   if (!votes.length) return;
   const supabase = await createClient();
 
-  const core = votes.map((vote) => ({
+  const detail = votes.map((vote) => ({
     meeting_id: meetingId,
     executive_id: vote.executiveId,
     vote: vote.vote,
-  }));
-
-  const detail = votes.map((vote, index) => ({
-    ...core[index]!,
     rationale: vote.rationale,
     confidence: vote.confidence,
     biggest_risk: vote.biggestRisk,
     biggest_strength: vote.biggestStrength,
     required_milestone: vote.requiredMilestone,
-    
-    
   }));
 
-  const save = (rows: Array<Record<string, unknown>>) =>
-    supabase.from("votes").upsert(rows, { onConflict: "meeting_id,executive_id" });
-
-  const full = await save(detail);
-  if (!full.error) return;
-  
-
-  
-
-  const bare = await save(core);
-  if (bare.error) throw new Error(bare.error.message);
+  const { error } = await supabase.from("votes").upsert(detail, { onConflict: "meeting_id,executive_id" });
+  if (error) throw new Error(error.message);
 }
 
 export async function completeMeeting(meetingId: string) {
@@ -231,4 +154,3 @@ export async function completeMeeting(meetingId: string) {
     .eq("id", meetingId);
   if (error) throw new Error(error.message);
 }
-

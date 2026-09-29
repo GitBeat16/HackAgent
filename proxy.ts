@@ -16,7 +16,7 @@ const protectedPrefixes = [
   "/admin",
 ];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const isProtected = protectedPrefixes.some(
     (prefix) => request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`),
   );
