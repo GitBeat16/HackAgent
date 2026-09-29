@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { writeAuditLog } from "./audit";
 
 export class ProcurementError extends Error {
@@ -220,8 +220,11 @@ export async function approveProposalWithMilestones(
 
   if (proposal.report_id) {
     const { data: report } = await supabase.from('reports').select('verdict').eq('id', proposal.report_id).single();
-    if (report && report.verdict !== 'Recommend Pilot' && !overrideReason) {
-      throw new ProcurementError("Override reason is required when approving against AI rejection.", "VALIDATION_FAILED");
+    if (report && report.verdict === 'Reject' && (!overrideReason || overrideReason.trim().length === 0)) {
+      throw new ProcurementError("Override reason is mandatory when approving a proposal that the AI Panel rejected.", "VALIDATION_FAILED");
+    }
+    if (report && report.verdict === 'Conditional Pilot' && (!overrideReason || overrideReason.trim().length === 0)) {
+      throw new ProcurementError("Override reason is mandatory to explain how the AI Panel's conditions are being met.", "VALIDATION_FAILED");
     }
   }
 
@@ -374,10 +377,12 @@ export async function uploadMilestoneEvidence(startupId: string, milestoneId: st
 
 export async function validateMilestone(validatorId: string, milestoneId: string, outcome: 'pass' | 'fail' | 'needs-rework', notes: string) {
   const supabase = await createClient();
-  const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(challenges!inner(department_id))').eq('id', milestoneId).single();
+  const { data: milestone } = await supabase.from('milestones').select('proposal_id, status, procurement_proposals!inner(decision_by)').eq('id', milestoneId).single();
   
   if (!milestone) throw new ProcurementError("Not found", "NOT_FOUND");
-  if (getProposalDeptId(milestone.procurement_proposals) === validatorId) {
+  
+  const proposal = Array.isArray(milestone.procurement_proposals) ? milestone.procurement_proposals[0] : milestone.procurement_proposals;
+  if (proposal?.decision_by === validatorId) {
     throw new ProcurementError("Approving officer cannot also validate", "FORBIDDEN");
   }
 
