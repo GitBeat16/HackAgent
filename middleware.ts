@@ -16,12 +16,17 @@ const protectedPrefixes = [
   "/admin",
 ];
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const isProtected = protectedPrefixes.some(
     (prefix) => request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`),
   );
 
   const { response, user } = await getSessionUser(request);
+  
+  if (request.nextUrl.pathname === "/login" && user) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+  
   if (!isProtected) return response;
   if (user) return response;
 

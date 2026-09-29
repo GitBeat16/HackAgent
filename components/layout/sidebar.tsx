@@ -114,6 +114,17 @@ export function Sidebar({ badgeCounts, collapsed = false, onToggleCollapsed, cla
             {!collapsed && <span>Collapse</span>}
           </Button>
         )}
+
+        <form action="/auth/signout" method="post" className="w-full mt-2">
+          <Button type="submit" variant="ghost" size={collapsed ? "icon" : "sm"} className={cn("w-full text-muted-foreground", !collapsed && "justify-start px-2.5")}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0", !collapsed && "mr-3")}>
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            {!collapsed && <span>Logout</span>}
+          </Button>
+        </form>
       </div>
     </aside>
   );
