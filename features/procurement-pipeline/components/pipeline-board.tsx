@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   fetchPipelineForChallenge,
   triggerAiEvaluation,
@@ -140,8 +141,13 @@ export function PipelineBoard({ challengeId }: { challengeId: string }) {
                     </div>
 
                     {proposal.ai_match_score !== null && (
-                      <div className="text-xs bg-primary/10 text-primary p-2 rounded">
-                        AI Score: <span className="font-bold">{proposal.ai_match_score}/100</span>
+                      <div className="flex items-center justify-between bg-primary/10 text-primary p-2 rounded">
+                        <div className="text-xs">
+                          AI Score: <span className="font-bold">{proposal.ai_match_score}/100</span>
+                        </div>
+                        <Link href={`/proposals/${proposal.id}/report`} className="text-xs hover:underline inline-flex items-center">
+                          View Report &rarr;
+                        </Link>
                       </div>
                     )}
 

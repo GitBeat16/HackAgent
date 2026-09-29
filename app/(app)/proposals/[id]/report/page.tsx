@@ -6,7 +6,7 @@ import { SectionHeader } from "@/components/shared/section-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScoreCard } from "@/components/shared/score-card";
-import { RadarChart } from "@/components/shared/radar-chart";
+import { BoardroomRadarChart } from "@/components/shared/radar-chart";
 import { ExecutiveCard } from "@/components/shared/executive-card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export default async function ProposalEvaluationReportPage({ params }: { params:
           </CardHeader>
           <CardContent className="h-[350px] flex items-center justify-center">
             {radarData.length > 0 ? (
-              <RadarChart data={radarData} series={radarSeries} />
+              <BoardroomRadarChart data={radarData} series={radarSeries} />
             ) : (
               <div className="text-muted-foreground flex items-center justify-center h-full">No dimensional data available.</div>
             )}
@@ -148,7 +148,7 @@ export default async function ProposalEvaluationReportPage({ params }: { params:
               <Card key={vote.executiveId} className={`border-l-4 ${vote.vote === 'yes' ? 'border-l-emerald-500' : vote.vote === 'no' ? 'border-l-rose-500' : 'border-l-amber-500'}`}>
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
-                    <ExecutiveCard id={vote.executiveId} name={vote.executiveName} role={vote.role} trait="" size="sm" />
+                    <ExecutiveCard name={vote.executiveName} role={vote.role} trait="" />
                     <Badge tone={vote.vote === 'yes' ? 'success' : vote.vote === 'no' ? 'destructive' : 'warning'}>
                       {vote.vote.toUpperCase()}
                     </Badge>

@@ -16,7 +16,7 @@ export type ExecutiveRole =
 
 export interface ExecutiveCardProps {
   name: string;
-  role: ExecutiveRole;
+  role: string;
   avatarUrl?: string;
   /** One-line personality trait shown as a badge, e.g. "Risk-averse", "Growth-obsessed". */
   trait?: string;
