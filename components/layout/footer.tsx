@@ -1,45 +1,38 @@
 import Link from "next/link";
-import { Gavel } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 const footerColumns = [
   {
-    heading: "Product",
+    heading: "Platform",
     links: [
       { label: "Dashboard", href: "/dashboard" },
-      { label: "Boardroom", href: "/boardroom" },
-      { label: "Reports", href: "/reports" },
-      { label: "Pricing", href: "/pricing" },
-    ],
-  },
-  {
-    heading: "Company",
-    links: [
-      { label: "About", href: "/about" },
-      { label: "The board", href: "/executives" },
+      { label: "Marketplace", href: "/marketplace" },
+      { label: "My Proposals", href: "/my-proposals" },
+      { label: "Challenges", href: "/challenges" },
     ],
   },
   {
     heading: "Resources",
     links: [
-      { label: "Sample report", href: "/reports" },
-      { label: "FAQ", href: "/#faq" },
+      { label: "Ministry Guidelines", href: "#" },
+      { label: "SIH Helpdesk", href: "#" },
     ],
   },
 ];
 
 export function Footer() {
   return (
-    <footer className="border-t border-border bg-surface">
-      <div className="container grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-5">
+    <footer className="border-t border-border bg-surface mt-auto">
+      <div className="container grid gap-10 py-16 sm:grid-cols-2 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <Link href="/" className="flex items-center gap-2">
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Gavel className="size-4" />
+              <Building2 className="size-4" />
             </span>
-            <span className="font-display text-lg font-medium tracking-tight">BoardroomAI</span>
+            <span className="font-display text-lg font-medium tracking-tight">HackAgent Gov</span>
           </Link>
           <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-            A virtual board of AI executives that pressure-tests your startup before a real one does.
+            The official government platform for AI-evaluated startup procurement. Built for SIH 2026.
           </p>
         </div>
 
@@ -61,8 +54,8 @@ export function Footer() {
 
       <div className="border-t border-border">
         <div className="container flex flex-col-reverse items-center justify-between gap-3 py-6 sm:flex-row">
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} BoardroomAI. All rights reserved.</p>
-          <p className="text-xs text-muted-foreground">Every executive on this board is an AI persona, not a real person.</p>
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} HackAgent / SIH 26136. Open Source.</p>
+          <p className="text-xs text-muted-foreground">This is a Hackathon project and not a real government portal.</p>
         </div>
       </div>
     </footer>
