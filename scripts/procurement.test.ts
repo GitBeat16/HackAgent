@@ -6,13 +6,20 @@ vi.mock('../lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
-// We also need to mock writeAuditLog since it's imported in procurement.ts and calls DB.
 vi.mock('../lib/server/audit', () => ({
   writeAuditLog: vi.fn(),
 }));
 
+type MockSupabase = {
+  from: ReturnType<typeof vi.fn>;
+  select: ReturnType<typeof vi.fn>;
+  eq: ReturnType<typeof vi.fn>;
+  single: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+};
+
 describe('validateMilestone', () => {
-  let mockSupabase: any;
+  let mockSupabase: MockSupabase;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,7 +34,7 @@ describe('validateMilestone', () => {
       })
     };
     
-    (serverAuth.createClient as any).mockResolvedValue(mockSupabase);
+    (serverAuth.createClient as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockSupabase);
   });
 
   it('throws an error if validatorId matches the approving officer (decision_by)', async () => {

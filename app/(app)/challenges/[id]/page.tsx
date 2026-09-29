@@ -141,7 +141,7 @@ export default async function ChallengeDetailPage({ params }: { params: { id: st
 
 
 
-                <SubmitProposalForm challengeId={params.id} submitAction={async (payload: any) => {
+                <SubmitProposalForm challengeId={params.id} submitAction={async (payload: unknown) => {
                   "use server";
                   const { user: actionUser } = await requireUser();
                   if (!actionUser) throw new Error("Unauthorized");

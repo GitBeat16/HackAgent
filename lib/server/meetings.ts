@@ -1,5 +1,5 @@
-﻿import { createClient } from "@/lib/supabase/server";
-import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage } from "@/types/api";
+import { createClient } from "@/lib/supabase/server";
+import type { CreatePitchRequest, MeetingResponse, MeetingTranscriptMessage, MessageVerification } from "@/types/api";
 import type { BoardVote, ExecutiveVoteDetail } from "@/types/report";
 
 type MeetingRow = {
@@ -19,7 +19,7 @@ type MeetingRow = {
     role: string;
     message: string;
     created_at: string;
-    verification?: any;
+    verification?: MessageVerification;
   }> | null;
   votes: Array<{ executive_id: string; vote: BoardVote }> | null;
   reports: { id: string } | Array<{ id: string }> | null;
@@ -61,7 +61,7 @@ function toDetail(meeting: MeetingRow): MeetingDetail {
         role: message.role,
         message: message.message,
         createdAt: message.created_at,
-        ...(message.verification ? { verification: message.verification } : {}),
+        ...(message.verification ? { verification: message.verification as MessageVerification } : {}),
       })),
     votes: meeting.votes?.length
       ? Object.fromEntries(meeting.votes.map((vote) => [vote.executive_id, vote.vote]))

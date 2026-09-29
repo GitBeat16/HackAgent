@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 
-export function SubmitProposalForm({ challengeId, submitAction }: { challengeId: string, submitAction: (payload: any) => Promise<void> }) {
+export function SubmitProposalForm({ challengeId, submitAction }: { challengeId: string, submitAction: (payload: unknown) => Promise<void> }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 

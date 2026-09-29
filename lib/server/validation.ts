@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const proposalSchema = z.object({
   solutionType: z.enum(["App Generation", "Service Proposal"]),
@@ -11,12 +11,18 @@ export const proposalSchema = z.object({
 export function sanitiseForPrompt(input: string): string {
   // Strip common LLM injection tokens and limit length
   let sanitized = input
+    .replace(/<system>/gi, '')
     .replace(/<\/system>/gi, '')
     .replace(/\[INST\]/gi, '')
+    .replace(/\[\/INST\]/gi, '')
     .replace(/<\|im_start\|>/gi, '')
     .replace(/<\|im_end\|>/gi, '')
     .replace(/System:/gi, '')
     .trim();
+  
+  if (sanitized.length > 5000) {
+    sanitized = sanitized.substring(0, 5000);
+  }
   
   return sanitized;
 }
