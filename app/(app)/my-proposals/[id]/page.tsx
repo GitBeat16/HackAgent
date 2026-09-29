@@ -6,6 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { IndianRupee } from "lucide-react";
 import { MilestoneClient } from "@/features/procurement-pipeline/components/milestone-client";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default async function ProposalTrackerPage({ params }: { params: Promise<{ id: string }> }) {
   const { user } = await requireUser();
@@ -33,10 +35,24 @@ export default async function ProposalTrackerPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto py-8">
-      <SectionHeader 
-        title={proposal.challenges?.title || "Pilot Tracker"} 
-        description={`Status: ${proposal.status.toUpperCase()}`}
-      />
+      <div className="flex justify-between items-start">
+        <SectionHeader 
+          title={proposal.challenges?.title || "Pilot Tracker"} 
+          description={`Status: ${proposal.status.toUpperCase()}`}
+        />
+        {['pilot_complete', 'scaled', 'completed'].includes(proposal.status) && (
+          <div className="text-right">
+            <Link href={`/api/proposals/${proposal.id}/procurement-package`} target="_blank">
+              <Button variant="outline" className="mb-1 text-xs">
+                Download Procurement Summary
+              </Button>
+            </Link>
+            <p className="text-[10px] text-muted-foreground w-64">
+              Structured export ready for GeM/procurement system integration (not a live submission)
+            </p>
+          </div>
+        )}
+      </div>
 
       {plan && (
         <Card>

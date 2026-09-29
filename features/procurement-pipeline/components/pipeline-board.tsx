@@ -177,7 +177,10 @@ export function PipelineBoard({ challengeId }: { challengeId: string }) {
                               </span>
                             </div>
                             <span className="text-[10px] text-muted-foreground">{chk.reason}</span>
-                          </div>
+                              {chk.rule_name.includes("DPIIT") && (
+                                <span className="text-[9px] text-blue-500/80 leading-tight">Format validated locally - live registry integration not yet connected</span>
+                              )}
+                            </div>
                         ))}
                       </div>
                     )}
